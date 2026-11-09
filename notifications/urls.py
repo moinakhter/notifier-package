@@ -15,6 +15,7 @@ router.register(r'history', NotificationViewSet, basename='notification-history'
 router.register(r'templates', NotificationTemplateViewSet, basename='notification-template')
 router.register(r'routing-rules', RoutingRuleViewSet, basename='routing-rule')
 router.register(r'severity-channels', SeverityChannelSettingViewSet, basename='severity-channel')
+router.register(r'severity-settings', SeverityChannelSettingViewSet, basename='severity-setting')
 
 urlpatterns = [
     path('notify/', NotificationIngestView.as_view(), name='notification-notify'),

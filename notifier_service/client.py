@@ -35,6 +35,8 @@ class NotifierClient:
         batch_size: int = 200,
         flush_interval: float = 0.05,
         server_hostname: str | None = None,
+        notify_exceptions_only: bool = False,
+        allowed_severities: list[str] | tuple[str, ...] | None = None,
     ):
         self.endpoint = endpoint.rstrip('/')
         self.notify_url = f'{self.endpoint}/api/v1/notifications/notify/'
@@ -46,6 +48,8 @@ class NotifierClient:
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self.server_hostname = server_hostname or socket.gethostname() or platform.node()
+        self.notify_exceptions_only = notify_exceptions_only
+        self.allowed_severities = [s.upper() for s in allowed_severities] if allowed_severities else None
 
         # In-memory buffer queue for high-throughput zero-latency logging
         self._queue = queue.Queue(maxsize=100000)
@@ -140,10 +144,19 @@ class NotifierClient:
         Record a notification.
         If async_send is True, places into queue with ~0.005ms latency.
         """
+        sev_upper = severity.upper()
+        if self.allowed_severities and sev_upper not in self.allowed_severities:
+            return
+
+        if self.notify_exceptions_only:
+            has_exc = bool(traceback_str or error_type or (context and ('exception' in context or 'traceback' in context)))
+            if not has_exc:
+                return
+
         payload = {
             'title': title,
             'message': message,
-            'severity': severity.upper(),
+            'severity': sev_upper,
             'service_name': service_name,
             'error_type': error_type,
             'traceback': traceback_str,
@@ -199,18 +212,27 @@ class NotifierLoggingHandler(logging.Handler):
         api_key: str | None = None,
         service_name: str = '',
         level: int = logging.ERROR,
+        notify_exceptions_only: bool = False,
+        allowed_severities: list[str] | tuple[str, ...] | None = None,
     ):
         super().__init__(level=level)
+        self.notify_exceptions_only = notify_exceptions_only
+        self.allowed_severities = [s.upper() for s in allowed_severities] if allowed_severities else None
         self.client = NotifierClient(
             endpoint=endpoint,
             project=project,
             api_key=api_key,
             async_send=True,
+            notify_exceptions_only=notify_exceptions_only,
+            allowed_severities=self.allowed_severities,
         )
         self.service_name = service_name
 
     def emit(self, record: logging.LogRecord):
         try:
+            if self.notify_exceptions_only and not record.exc_info:
+                return
+
             msg = self.format(record)
             sev = 'CRITICAL' if record.levelno >= logging.CRITICAL else 'ERROR'
             if record.levelno == logging.WARNING:

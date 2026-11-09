@@ -34,6 +34,10 @@ class Project(models.Model):
         default=Environment.DEVELOPMENT,
     )
     is_active = models.BooleanField(default=True)
+    notify_exceptions_only = models.BooleanField(
+        default=False,
+        help_text='Only dispatch channel notifications when an actual exception or traceback is captured',
+    )
     rate_limit = models.IntegerField(
         default=100,
         help_text='Maximum notifications per minute',
@@ -46,6 +50,33 @@ class Project(models.Model):
 
     def __str__(self):
         return f'{self.name} [{self.environment}]'
+
+    def get_or_create_severity_settings(self):
+        """
+        Ensure default severity channel settings exist for all 5 severities:
+          - CRITICAL: Email + Telegram enabled
+          - ERROR: Email enabled
+          - WARNING: All disabled (no channel alerts by default)
+          - INFO: All disabled (no channel alerts by default)
+          - SUCCESS: All disabled (no channel alerts by default)
+        """
+        from notifications.models import Severity, SeverityChannelSetting
+        matrix = []
+        default_configs = {
+            Severity.CRITICAL.value: {'email_enabled': True, 'telegram_enabled': True, 'whatsapp_enabled': False, 'instagram_enabled': False},
+            Severity.ERROR.value: {'email_enabled': True, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
+            Severity.WARNING.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
+            Severity.INFO.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
+            Severity.SUCCESS.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
+        }
+        for sev_choice, defaults in default_configs.items():
+            setting, _ = SeverityChannelSetting.objects.get_or_create(
+                project=self,
+                severity=sev_choice,
+                defaults=defaults,
+            )
+            matrix.append(setting)
+        return matrix
 
     @classmethod
     def get_default_project(cls) -> 'Project':

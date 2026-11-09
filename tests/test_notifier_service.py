@@ -488,3 +488,140 @@ class NotifierServiceFeatureTests(TestCase):
         # Check recent activity
         self.assertIn('recent_activity', data)
         self.assertGreaterEqual(len(data['recent_activity']), 1)
+
+    # =========================================================================
+    # FEATURE 7: SEVERITY FILTERING & EXCEPTION-ONLY SELECTION TESTS
+    # =========================================================================
+    def test_severity_filtering_and_custom_matrix(self):
+        """Test default severity filtering and custom user channel matrix."""
+        from delivery.tasks import resolve_channels_for_notification
+
+        # Default fallback: WARNING and INFO return NO channels ([])
+        warning_notif = Notification.objects.create(
+            project=self.project,
+            title='Memory Warning 75%',
+            severity=Severity.WARNING,
+        )
+        self.assertEqual(resolve_channels_for_notification(warning_notif), [])
+
+        info_notif = Notification.objects.create(
+            project=self.project,
+            title='Cron job finished',
+            severity=Severity.INFO,
+        )
+        self.assertEqual(resolve_channels_for_notification(info_notif), [])
+
+        # Default fallback: ERROR returns EMAIL only
+        error_notif = Notification.objects.create(
+            project=self.project,
+            title='Database timeout',
+            severity=Severity.ERROR,
+            error_type='OperationalError',
+        )
+        self.assertEqual(resolve_channels_for_notification(error_notif), ['EMAIL'])
+
+        # Custom matrix: User enables Telegram for WARNING
+        SeverityChannelSetting.objects.create(
+            project=self.project,
+            severity=Severity.WARNING,
+            email_enabled=False,
+            telegram_enabled=True,
+            whatsapp_enabled=False,
+            instagram_enabled=False,
+        )
+        self.assertEqual(resolve_channels_for_notification(warning_notif), ['TELEGRAM'])
+
+        # Custom matrix: User explicitly turns off ALL channels for ERROR
+        SeverityChannelSetting.objects.create(
+            project=self.project,
+            severity=Severity.ERROR,
+            email_enabled=False,
+            telegram_enabled=False,
+            whatsapp_enabled=False,
+            instagram_enabled=False,
+        )
+        # Must return empty list, NOT fall back to sending email!
+        self.assertEqual(resolve_channels_for_notification(error_notif), [])
+
+    def test_notify_exceptions_only_policy(self):
+        """Test that notify_exceptions_only suppresses alerts when no exception is present."""
+        from delivery.tasks import resolve_channels_for_notification
+
+        self.project.notify_exceptions_only = True
+        self.project.save()
+
+        # Regular log with ERROR severity but NO exception traceback or error_type
+        regular_log = Notification.objects.create(
+            project=self.project,
+            title='Failed login attempt for user admin',
+            severity=Severity.ERROR,
+        )
+        self.assertEqual(resolve_channels_for_notification(regular_log), [])
+
+        # Log with actual exception error_type and traceback
+        exception_log = Notification.objects.create(
+            project=self.project,
+            title='ZeroDivisionError: division by zero',
+            severity=Severity.ERROR,
+            error_type='ZeroDivisionError',
+            traceback='Traceback (most recent call last):\n  File "app.py", line 12\nZeroDivisionError: division by zero',
+        )
+        self.assertEqual(resolve_channels_for_notification(exception_log), ['EMAIL'])
+
+    def test_client_and_logging_handler_filters(self):
+        """Test NotifierClient and NotifierLoggingHandler client-side filtering."""
+        from notifier_service.client import NotifierClient, NotifierLoggingHandler
+        import logging
+
+        with patch.object(NotifierClient, '_send_batch_request') as mock_send:
+            client = NotifierClient(
+                endpoint='http://testserver',
+                project='ecommerce-platform',
+                async_send=False,
+                notify_exceptions_only=True,
+                allowed_severities=['ERROR', 'CRITICAL'],
+            )
+
+            # 1. Ignored because severity is WARNING
+            client.notify(title='Warning log', severity='WARNING')
+            mock_send.assert_not_called()
+
+            # 2. Ignored because notify_exceptions_only=True and no traceback/error_type
+            client.notify(title='Error without exception', severity='ERROR')
+            mock_send.assert_not_called()
+
+            # 3. Sent because it contains an actual exception
+            client.notify(
+                title='Error with exception',
+                severity='ERROR',
+                error_type='KeyError',
+                traceback_str='Traceback...',
+            )
+            mock_send.assert_called_once()
+
+    def test_dashboard_settings_web_view_and_api_matrix(self):
+        """Test GET and POST on /settings/ web view and REST matrix API."""
+        # Test web view GET
+        res = self.client.get('/settings/')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'Notification & Alert Filter Preferences')
+        self.assertContains(res, 'Only Alert on Actual Exceptions')
+
+        # Test web view POST
+        post_data = {
+            'project': str(self.project.id),
+            'notify_exceptions_only': 'on',
+            'email_CRITICAL': 'on',
+            'telegram_CRITICAL': 'on',
+            'email_ERROR': 'on',
+            # WARNING, INFO, SUCCESS unselected
+        }
+        res = self.client.post('/settings/', post_data)
+        self.assertEqual(res.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertTrue(self.project.notify_exceptions_only)
+
+        # Test REST API matrix endpoint
+        res = self.client.get(f'/api/v1/notifications/severity-settings/project-matrix/?project={self.project.id}')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data['settings']), 5)

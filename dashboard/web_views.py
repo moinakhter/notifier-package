@@ -72,3 +72,59 @@ def dashboard_home_view(request):
         'projects': proj_qs,
     }
     return render(request, 'dashboard/index.html', context)
+
+
+def dashboard_settings_view(request):
+    """Render and manage notification filtering and channel settings per project."""
+    user = request.user
+    proj_qs = Project.objects.all()
+    if user.is_authenticated and not (user.is_staff or user.is_superuser):
+        proj_qs = proj_qs.filter(owner=user)
+
+    # Resolve active project
+    proj_id = request.GET.get('project') or request.POST.get('project')
+    selected_project = None
+    if proj_id:
+        selected_project = proj_qs.filter(id=proj_id).first()
+    if not selected_project:
+        selected_project = proj_qs.first() or Project.get_default_project()
+
+    success_message = None
+
+    if request.method == 'POST':
+        # Update project settings
+        selected_project.notify_exceptions_only = 'notify_exceptions_only' in request.POST
+        selected_project.save(update_fields=['notify_exceptions_only', 'updated_at'])
+
+        # Update per-severity channel settings
+        from notifications.models import SeverityChannelSetting
+        severities = [s.value for s in Severity]
+        for sev in severities:
+            email_key = f'email_{sev}'
+            tg_key = f'telegram_{sev}'
+            wa_key = f'whatsapp_{sev}'
+            ig_key = f'instagram_{sev}'
+
+            SeverityChannelSetting.objects.update_or_create(
+                project=selected_project,
+                severity=sev,
+                defaults={
+                    'email_enabled': email_key in request.POST,
+                    'telegram_enabled': tg_key in request.POST,
+                    'whatsapp_enabled': wa_key in request.POST,
+                    'instagram_enabled': ig_key in request.POST,
+                },
+            )
+
+        success_message = f"Notification settings for '{selected_project.name}' saved! Channel alerts will strictly dispatch for your selected options."
+
+    # Ensure matrix exists
+    settings_matrix = selected_project.get_or_create_severity_settings()
+
+    context = {
+        'projects': proj_qs,
+        'selected_project': selected_project,
+        'settings_matrix': settings_matrix,
+        'success_message': success_message,
+    }
+    return render(request, 'dashboard/settings.html', context)

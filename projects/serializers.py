@@ -92,6 +92,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'owner',
             'environment',
             'is_active',
+            'notify_exceptions_only',
             'rate_limit',
             'server_count',
             'api_key_count',

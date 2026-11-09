@@ -403,3 +403,67 @@ class SeverityChannelSettingViewSet(viewsets.ModelViewSet):
         if user.is_authenticated and not (user.is_staff or user.is_superuser):
             return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
         return qs
+
+    @action(detail=False, methods=['get', 'post'], url_path='project-matrix')
+    def project_matrix(self, request):
+        """
+        Get or batch update all 5 severity channel configurations for a project at once.
+        GET: /api/v1/notifications/severity-settings/project-matrix/?project=<id_or_slug>
+        POST: /api/v1/notifications/severity-settings/project-matrix/
+              {
+                "project": "<id_or_slug>",
+                "notify_exceptions_only": true,
+                "settings": [
+                    {"severity": "CRITICAL", "email_enabled": true, "telegram_enabled": true, "whatsapp_enabled": false, "instagram_enabled": false},
+                    {"severity": "ERROR", "email_enabled": true, "telegram_enabled": false, "whatsapp_enabled": false, "instagram_enabled": false},
+                    {"severity": "WARNING", "email_enabled": false, "telegram_enabled": false, "whatsapp_enabled": false, "instagram_enabled": false},
+                    {"severity": "INFO", "email_enabled": false, "telegram_enabled": false, "whatsapp_enabled": false, "instagram_enabled": false},
+                    {"severity": "SUCCESS", "email_enabled": false, "telegram_enabled": false, "whatsapp_enabled": false, "instagram_enabled": false}
+                ]
+              }
+        """
+        proj_identifier = request.data.get('project') or request.query_params.get('project')
+        project = None
+        if proj_identifier:
+            proj_str = str(proj_identifier).strip()
+            try:
+                import uuid as _uuid
+                _uuid.UUID(proj_str)
+                project = Project.objects.filter(id=proj_str).first()
+            except (ValueError, AttributeError):
+                pass
+            if not project:
+                project = Project.objects.filter(slug=proj_str).first() or Project.objects.filter(name__iexact=proj_str).first()
+
+        if not project:
+            project = Project.get_default_project()
+
+        if request.method == 'POST':
+            if 'notify_exceptions_only' in request.data:
+                project.notify_exceptions_only = bool(request.data['notify_exceptions_only'])
+                project.save(update_fields=['notify_exceptions_only', 'updated_at'])
+
+            settings_data = request.data.get('settings', [])
+            for item in settings_data:
+                sev = str(item.get('severity', '')).upper()
+                if sev in [s.value for s in Severity]:
+                    SeverityChannelSetting.objects.update_or_create(
+                        project=project,
+                        severity=sev,
+                        defaults={
+                            'email_enabled': bool(item.get('email_enabled', False)),
+                            'telegram_enabled': bool(item.get('telegram_enabled', False)),
+                            'whatsapp_enabled': bool(item.get('whatsapp_enabled', False)),
+                            'instagram_enabled': bool(item.get('instagram_enabled', False)),
+                        },
+                    )
+
+        # Ensure matrix exists
+        matrix = project.get_or_create_severity_settings()
+        serializer = SeverityChannelSettingSerializer(matrix, many=True)
+        return Response({
+            'project_id': str(project.id),
+            'project_name': project.name,
+            'notify_exceptions_only': project.notify_exceptions_only,
+            'settings': serializer.data,
+        })

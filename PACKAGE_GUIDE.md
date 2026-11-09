@@ -173,7 +173,74 @@ curl -X POST http://your-central-server:8000/api/v1/notifications/notify/ \
 
 ---
 
-## 4. Running the Central Notifier Service
+## 4. User-Controlled Error Log Filtering & Channel Selection
+
+You have complete control over which errors trigger alerts. By default, **WARNING**, **INFO**, and **SUCCESS** logs are recorded silently in history without dispatching emails or messaging alerts. Only **CRITICAL** and **ERROR** events alert you unless you customize them.
+
+### Web Dashboard Settings UI (`/settings/`)
+Visit `http://your-server:8000/settings/` in any browser:
+1. **Select your Project** from the dropdown.
+2. **Toggle "Only Alert on Actual Exceptions"**:
+   - When enabled, channel alerts (Email, Telegram, WhatsApp) are **only** sent if the log contains an actual Python/application exception, traceback, or `error_type`. Clean logs without an error traceback are silently recorded in the database without spamming your inbox.
+3. **Customize the Severity Matrix**:
+   - Choose exactly which channels (Email, Telegram, WhatsApp, Instagram) are enabled for each level:
+     - 🔴 **CRITICAL**: Fatal crashes & system outages
+     - 🟠 **ERROR**: Caught exceptions & database/network failures
+     - 🟡 **WARNING**: Slow queries, memory warnings (silent by default)
+     - 🔵 **INFO**: Operational logs (silent by default)
+     - 🟢 **SUCCESS**: Deployments & backup confirmations (silent by default)
+   - Uncheck all channels for any severity to mute it completely.
+4. Click **"Save Notification Settings"** to apply instantly.
+
+### Filtering in Client Code
+You can also filter logs directly at the source in your application:
+
+```python
+# In standard Python logging:
+from notifier_service.client import NotifierLoggingHandler
+
+handler = NotifierLoggingHandler(
+    endpoint="http://your-central-server:8000",
+    project="Payment Gateway",
+    notify_exceptions_only=True,                 # Only notify if record has exc_info / traceback
+    allowed_severities=["ERROR", "CRITICAL"],   # Ignore WARNING and INFO
+)
+
+# In NotifierClient:
+from notifier_service.client import NotifierClient
+
+client = NotifierClient(
+    endpoint="http://your-central-server:8000",
+    project="Payment Gateway",
+    notify_exceptions_only=True,
+    allowed_severities=["ERROR", "CRITICAL"],
+)
+```
+
+### Managing via REST API
+```bash
+# Get current matrix for a project
+curl http://your-central-server:8000/api/v1/notifications/severity-settings/project-matrix/?project=default-project
+
+# Update project alert filtering
+curl -X POST http://your-central-server:8000/api/v1/notifications/severity-settings/project-matrix/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project": "default-project",
+    "notify_exceptions_only": true,
+    "settings": [
+      {"severity": "CRITICAL", "email_enabled": true, "telegram_enabled": true},
+      {"severity": "ERROR", "email_enabled": true, "telegram_enabled": false},
+      {"severity": "WARNING", "email_enabled": false, "telegram_enabled": false},
+      {"severity": "INFO", "email_enabled": false, "telegram_enabled": false},
+      {"severity": "SUCCESS", "email_enabled": false, "telegram_enabled": false}
+    ]
+  }'
+```
+
+---
+
+## 5. Running the Central Notifier Service
 
 ### Install and Start with a Single Command
 ```bash

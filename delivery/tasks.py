@@ -22,37 +22,50 @@ logger = logging.getLogger(__name__)
 def resolve_channels_for_notification(notification) -> list[str]:
     """
     Resolve which channels should receive this notification based on:
+      0. Exception-only filter check: if project.notify_exceptions_only is enabled,
+         channel alerts are only sent if an actual exception/traceback/error_type is present.
       1. Custom Routing Rules (priority ordered)
       2. Severity Channel Matrix
-      3. Default fallback
+      3. Default fallback (only actual exceptions/errors notify by default)
     """
     from notifications.models import RoutingRule, SeverityChannelSetting, Severity
+
+    # 0. Exception-only filter check
+    if getattr(notification.project, 'notify_exceptions_only', False):
+        has_exception = bool(
+            notification.error_type
+            or notification.traceback
+            or (notification.context and ('exception' in notification.context or 'traceback' in notification.context))
+        )
+        if not has_exception:
+            logger.info(
+                f"Notification {notification.id} skipped for channels: project "
+                f"'{notification.project.name}' has notify_exceptions_only enabled and no exception was detected."
+            )
+            return []
 
     # 1. Custom Routing Rules
     rules = RoutingRule.objects.filter(project=notification.project, is_active=True)
     for rule in rules:
         if rule.matches(notification):
-            channels = rule.get_channels()
-            if channels:
-                return channels
+            return rule.get_channels()
 
-    # 2. Project Severity Settings
+    # 2. Project Severity Settings (Respect user configuration 100%)
     sev_setting = SeverityChannelSetting.objects.filter(
         project=notification.project,
         severity=notification.severity,
     ).first()
-    if sev_setting:
-        channels = sev_setting.get_channels()
-        if channels:
-            return channels
+    if sev_setting is not None:
+        return sev_setting.get_channels()
 
-    # 3. Default fallback by severity
-    if notification.severity in (Severity.CRITICAL, Severity.ERROR):
-        return ['EMAIL', 'TELEGRAM', 'WHATSAPP']
-    elif notification.severity == Severity.WARNING:
+    # 3. Default fallback by severity: ONLY send alerts for actual exceptions/errors!
+    # Warning, Info, and Success do NOT send channel alerts by default unless user enables them.
+    if notification.severity in (Severity.CRITICAL.value, Severity.CRITICAL):
         return ['EMAIL', 'TELEGRAM']
-    else:  # INFO, SUCCESS
+    elif notification.severity in (Severity.ERROR.value, Severity.ERROR):
         return ['EMAIL']
+    else:  # WARNING, INFO, SUCCESS
+        return []
 
 
 def format_notification_text(notification) -> tuple[str, str]:
@@ -114,6 +127,13 @@ def deliver_notification_task(self, notification_id: str):
     notification.save(update_fields=['status'])
 
     target_channels = resolve_channels_for_notification(notification)
+    if not target_channels:
+        # User has not enabled notifications for this severity/event (e.g. Warning/Info or non-exception).
+        # We record it in DB but do not spam channels.
+        notification.status = NotificationStatus.DELIVERED
+        notification.save(update_fields=['status'])
+        return
+
     subject, body = format_notification_text(notification)
 
     attempt_number = self.request.retries + 1
