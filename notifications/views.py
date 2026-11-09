@@ -45,9 +45,10 @@ from .pipeline import IngestionPipeline
 
 class NotificationIngestView(APIView):
     """
-    Non-blocking endpoint for client applications to ingest notifications.
+    Non-blocking endpoint for client applications on any server to ingest notifications.
     No authentication required by default. Clients can optionally authenticate
     via API Key header: X-API-Key: <key>
+    Supports auto-creation and lookup of remote projects and servers.
     """
     permission_classes = [permissions.AllowAny]
 
@@ -56,27 +57,66 @@ class NotificationIngestView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Determine project from API key auth or explicit query/body parameter, or fallback to default project
+        # Determine or auto-register project from API key, slug, name, or UUID
         project = getattr(request, 'project', None)
         if not project:
-            project_id = request.data.get('project') or request.query_params.get('project')
-            if project_id:
-                project = Project.objects.filter(id=project_id).first()
-            if not project and request.user.is_authenticated:
+            proj_identifier = (
+                data.get('project')
+                or data.get('project_name')
+                or request.data.get('project')
+                or request.data.get('project_name')
+                or request.query_params.get('project')
+            )
+            if proj_identifier:
+                proj_str = str(proj_identifier).strip()
+                # 1. Try finding by UUID
+                try:
+                    import uuid as _uuid
+                    _uuid.UUID(proj_str)
+                    project = Project.objects.filter(id=proj_str).first()
+                except (ValueError, AttributeError):
+                    pass
+
+                # 2. Try finding by slug or name
+                if not project:
+                    from django.utils.text import slugify
+                    project = Project.objects.filter(slug=slugify(proj_str)).first()
+                if not project:
+                    project = Project.objects.filter(name__iexact=proj_str).first()
+
+                # 3. Auto-create project for the remote application
+                if not project:
+                    from projects.models import Environment
+                    env_val = request.data.get('environment') or Environment.DEVELOPMENT
+                    if env_val not in [e.value for e in Environment]:
+                        env_val = Environment.DEVELOPMENT
+                    project = Project.objects.create(
+                        name=proj_str,
+                        environment=env_val,
+                        description=f'Remote project auto-registered from host {data.get("server_hostname") or request.META.get("REMOTE_ADDR")}',
+                    )
+
+            elif request.user.is_authenticated:
                 project = Project.objects.filter(owner=request.user, is_active=True).first()
+
             if not project:
-                # Default project: creates automatically on zero-config installs
                 project = Project.get_default_project()
 
         # Lookup or register server if hostname provided
         server = None
-        server_hostname = data.get('server_hostname')
+        server_hostname = (
+            data.get('server_hostname')
+            or request.data.get('hostname')
+            or request.data.get('server')
+        )
+        server_ip = data.get('server_ip') or request.META.get('REMOTE_ADDR')
         if server_hostname:
             server, created = Server.objects.get_or_create(
                 project=project,
-                hostname=server_hostname,
+                hostname=str(server_hostname).strip(),
                 defaults={
-                    'name': server_hostname,
+                    'name': str(server_hostname).strip(),
+                    'ip_address': server_ip if server_ip and server_ip != '127.0.0.1' else None,
                     'environment': project.environment,
                 },
             )

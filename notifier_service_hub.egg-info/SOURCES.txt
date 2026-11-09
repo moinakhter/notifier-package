@@ -60,6 +60,8 @@ notifications/migrations/0001_initial.py
 notifications/migrations/__init__.py
 notifier_service/__init__.py
 notifier_service/cli.py
+notifier_service/client.py
+notifier_service/middleware.py
 notifier_service_hub.egg-info/PKG-INFO
 notifier_service_hub.egg-info/SOURCES.txt
 notifier_service_hub.egg-info/dependency_links.txt

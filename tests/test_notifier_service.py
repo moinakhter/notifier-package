@@ -401,8 +401,51 @@ class NotifierServiceFeatureTests(TestCase):
             mock_deliver.assert_called_once_with(str(notif.id))
 
     # =========================================================================
-    # FEATURE 1: DASHBOARD STATS TEST
+    # MULTI-SERVER / REMOTE APPLICATION TESTS
     # =========================================================================
+    def test_remote_project_auto_registration_and_server_link(self):
+        """Test a remote server in another project connecting simultaneously."""
+        remote_client = APIClient()  # completely unauthenticated external client
+
+        res = remote_client.post('/api/v1/notifications/notify/', {
+            'project': 'Payment Gateway Microservice',
+            'server_hostname': 'ec2-us-west-prod-09.internal',
+            'server_ip': '192.168.1.109',
+            'title': 'Stripe Circuit Breaker Tripped',
+            'message': '504 gateway timeout on charge',
+            'severity': Severity.CRITICAL,
+            'service_name': 'payment-svc',
+        })
+        self.assertEqual(res.status_code, status.HTTP_202_ACCEPTED)
+
+        # Verify project was auto-registered
+        remote_proj = Project.objects.filter(name='Payment Gateway Microservice').first()
+        self.assertIsNotNone(remote_proj)
+
+        # Verify server was auto-registered under this project
+        remote_server = Server.objects.filter(project=remote_proj, hostname='ec2-us-west-prod-09.internal').first()
+        self.assertIsNotNone(remote_server)
+        self.assertEqual(remote_server.ip_address, '192.168.1.109')
+
+    def test_notifier_client_sdk_exception_capture(self):
+        """Test NotifierClient SDK captures exception with full traceback."""
+        from notifier_service.client import NotifierClient
+        from unittest.mock import patch
+
+        client = NotifierClient(endpoint='http://127.0.0.1:8000', project='OrderService', async_send=False)
+
+        with patch.object(client, '_do_send') as mock_send:
+            try:
+                raise ValueError("Card token expired")
+            except Exception as e:
+                client.capture_exception(e, service_name='billing')
+
+            mock_send.assert_called_once()
+            call_payload = mock_send.call_args[0][0]
+            self.assertEqual(call_payload['project'], 'OrderService')
+            self.assertEqual(call_payload['error_type'], 'ValueError')
+            self.assertIn('Card token expired', call_payload['message'])
+            self.assertIn('Traceback (most recent call last)', call_payload['traceback'])
     def test_dashboard_stats_api(self):
         """Test dashboard stats endpoint produces all required metrics."""
         # Create sample data
