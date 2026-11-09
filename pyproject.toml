@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "notifier-service-hub"
-version = "1.0.3"
+version = "1.0.4"
 description = "Free, open-source multi-channel notification and error alert engine with embedded SQLite and zero-auth access."
 readme = "README.md"
 authors = [
@@ -63,9 +63,11 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/example/notifier-service"
-Documentation = "https://github.com/example/notifier-service#readme"
-Repository = "https://github.com/example/notifier-service"
+Homepage = "https://github.com/moinakhter/notifier-package"
+Documentation = "https://github.com/moinakhter/notifier-package#readme"
+Repository = "https://github.com/moinakhter/notifier-package.git"
+"Bug Tracker" = "https://github.com/moinakhter/notifier-package/issues"
+"Changelog" = "https://github.com/moinakhter/notifier-package/blob/main/README.md"
 
 [project.scripts]
 notifier-service = "notifier_service.cli:main"
