@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Notifier Service
 
 A production-grade, reliable multi-channel notification and alert dispatching service built with **Python 3.12+**, **Django 5 / REST Framework**, **Celery**, **Redis**, and **PostgreSQL**.
@@ -232,3 +233,6 @@ Ran 13 tests in 2.266s
 OK
 ```
 All unit and integration tests verify project management, channel configurations, deduping, grouping, rate limiting, triage, exports, and DLQ retries.
+=======
+# notifier-pacakge
+>>>>>>> 26e8849424b91a1ca69b3cbd284b6353b46c2de8
