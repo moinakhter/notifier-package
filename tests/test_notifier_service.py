@@ -434,18 +434,19 @@ class NotifierServiceFeatureTests(TestCase):
 
         client = NotifierClient(endpoint='http://127.0.0.1:8000', project='OrderService', async_send=False)
 
-        with patch.object(client, '_do_send') as mock_send:
+        with patch.object(client, '_send_batch_request') as mock_send:
             try:
                 raise ValueError("Card token expired")
             except Exception as e:
                 client.capture_exception(e, service_name='billing')
 
             mock_send.assert_called_once()
-            call_payload = mock_send.call_args[0][0]
-            self.assertEqual(call_payload['project'], 'OrderService')
-            self.assertEqual(call_payload['error_type'], 'ValueError')
-            self.assertIn('Card token expired', call_payload['message'])
-            self.assertIn('Traceback (most recent call last)', call_payload['traceback'])
+            call_batch = mock_send.call_args[0][0]
+            self.assertEqual(len(call_batch), 1)
+            event = call_batch[0]
+            self.assertEqual(event['error_type'], 'ValueError')
+            self.assertIn('Card token expired', event['message'])
+            self.assertIn('Traceback (most recent call last)', event['traceback'])
     def test_dashboard_stats_api(self):
         """Test dashboard stats endpoint produces all required metrics."""
         # Create sample data

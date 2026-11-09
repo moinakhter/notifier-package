@@ -84,17 +84,24 @@ class NotificationIngestView(APIView):
                 if not project:
                     project = Project.objects.filter(name__iexact=proj_str).first()
 
-                # 3. Auto-create project for the remote application
+                # 3. Auto-create project for the remote application (thread-safe)
                 if not project:
                     from projects.models import Environment
+                    from django.db import IntegrityError
                     env_val = request.data.get('environment') or Environment.DEVELOPMENT
                     if env_val not in [e.value for e in Environment]:
                         env_val = Environment.DEVELOPMENT
-                    project = Project.objects.create(
-                        name=proj_str,
-                        environment=env_val,
-                        description=f'Remote project auto-registered from host {data.get("server_hostname") or request.META.get("REMOTE_ADDR")}',
-                    )
+                    try:
+                        project, _ = Project.objects.get_or_create(
+                            slug=slugify(proj_str),
+                            defaults={
+                                'name': proj_str,
+                                'environment': env_val,
+                                'description': f'Remote project auto-registered from host {data.get("server_hostname") or request.META.get("REMOTE_ADDR")}',
+                            },
+                        )
+                    except IntegrityError:
+                        project = Project.objects.filter(slug=slugify(proj_str)).first() or Project.objects.filter(name__iexact=proj_str).first()
 
             elif request.user.is_authenticated:
                 project = Project.objects.filter(owner=request.user, is_active=True).first()
@@ -145,6 +152,74 @@ class NotificationIngestView(APIView):
             'occurrence_count': notif.occurrence_count,
             'created_at': notif.created_at,
         }, status=status.HTTP_202_ACCEPTED if is_queued else status.HTTP_200_OK)
+
+
+class BatchNotificationIngestView(APIView):
+    """
+    High-throughput batch ingestion endpoint capable of absorbing
+    thousands of log events per second from any microservice cluster.
+    Accepts:
+      {"events": [...], "project": "name", "server_hostname": "..."}
+      or a raw JSON array: [{...}, {...}]
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        import time
+        from projects.models import Environment
+        data = request.data
+        if isinstance(data, list):
+            items = data
+            project_name = request.query_params.get('project') or 'default-project'
+            server_hostname = request.query_params.get('server_hostname') or 'remote-cluster'
+        else:
+            items = data.get('events') or data.get('logs') or data.get('items') or []
+            project_name = data.get('project') or data.get('project_name') or 'default-project'
+            server_hostname = data.get('server_hostname') or data.get('hostname') or 'remote-cluster'
+
+        if not items:
+            return Response({'error': 'No events provided in batch.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Lookup or register project and server
+        project = getattr(request, 'project', None)
+        if not project:
+            from django.utils.text import slugify
+            from django.db import IntegrityError
+            project = Project.objects.filter(slug=slugify(project_name)).first()
+            if not project:
+                try:
+                    project, _ = Project.objects.get_or_create(
+                        slug=slugify(project_name),
+                        defaults={
+                            'name': project_name,
+                            'environment': Environment.DEVELOPMENT,
+                            'description': 'Batch ingest remote project',
+                        },
+                    )
+                except IntegrityError:
+                    project = Project.objects.filter(slug=slugify(project_name)).first()
+
+        server = None
+        if server_hostname:
+            server, _ = Server.objects.get_or_create(
+                project=project,
+                hostname=str(server_hostname).strip(),
+                defaults={'name': str(server_hostname).strip(), 'environment': project.environment},
+            )
+            server.touch()
+
+        start_time = time.time()
+        result = IngestionPipeline.process_batch(project, items, server=server)
+        elapsed_sec = max(time.time() - start_time, 0.0001)
+        elapsed_ms = round(elapsed_sec * 1000, 2)
+
+        return Response({
+            'status': 'accepted',
+            'processed': result['processed'],
+            'queued_for_delivery': result['queued'],
+            'duration_ms': elapsed_ms,
+            'throughput_per_sec': round(result['processed'] / elapsed_sec, 1),
+        }, status=status.HTTP_202_ACCEPTED)
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):

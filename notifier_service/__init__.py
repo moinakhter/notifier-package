@@ -6,7 +6,7 @@ Zero-configuration SQLite default, no authentication required.
 from .client import NotifierClient, NotifierLoggingHandler
 from .middleware import NotifierExceptionMiddleware
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __author__ = "Notifier Service Authors"
 __license__ = "MIT"
 

@@ -183,6 +183,65 @@ class IngestionPipeline:
         return notif, True, 'queued_for_delivery'
 
     @classmethod
+    def process_batch(cls, project, items: list[dict], server=None) -> dict:
+        """
+        High-throughput batch ingestion using bulk_create.
+        Handles thousands of logs per second in single atomic operations.
+        """
+        if not items:
+            return {'processed': 0, 'queued': 0}
+
+        to_create = []
+        for item in items:
+            title = str(item.get('title', 'Log Event')).strip()
+            message = str(item.get('message', ''))
+            severity = str(item.get('severity', Severity.ERROR)).upper()
+            if severity not in [s.value for s in Severity]:
+                severity = Severity.ERROR
+            service_name = str(item.get('service_name', ''))
+            error_type = str(item.get('error_type', ''))
+            traceback = str(item.get('traceback', ''))
+            context = item.get('context') or {}
+            idempotency_key = item.get('idempotency_key')
+
+            temp_hash = hashlib.sha256(
+                f'{project.id}:{title.lower()}:{error_type}:{service_name}'.encode('utf-8')
+            ).hexdigest()
+            group_key = f'{project.id}:{service_name}:{error_type or title.lower()}'
+
+            notif = Notification(
+                project=project,
+                server=server,
+                title=title,
+                message=message,
+                severity=severity,
+                service_name=service_name,
+                error_type=error_type,
+                traceback=traceback,
+                context=context,
+                status=NotificationStatus.PENDING,
+                idempotency_key=idempotency_key,
+                content_hash=temp_hash,
+                group_key=group_key,
+            )
+            to_create.append(notif)
+
+        # Atomic bulk create
+        created_objects = Notification.objects.bulk_create(to_create, batch_size=500)
+
+        # Dispatch async delivery for critical/error notifications (or first in batch)
+        queued_count = 0
+        for notif in created_objects:
+            if notif.severity in (Severity.CRITICAL.value, Severity.ERROR.value) and queued_count < 10:
+                cls._dispatch_async_delivery(notif)
+                queued_count += 1
+
+        return {
+            'processed': len(created_objects),
+            'queued': queued_count,
+        }
+
+    @classmethod
     def _check_rate_limit(cls, project_id, max_per_minute: int) -> bool:
         """
         Sliding 1-minute window rate limit using cache.

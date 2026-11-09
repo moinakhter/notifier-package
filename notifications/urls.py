@@ -3,6 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     NotificationIngestView,
+    BatchNotificationIngestView,
     NotificationViewSet,
     NotificationTemplateViewSet,
     RoutingRuleViewSet,
@@ -17,5 +18,6 @@ router.register(r'severity-channels', SeverityChannelSettingViewSet, basename='s
 
 urlpatterns = [
     path('notify/', NotificationIngestView.as_view(), name='notification-notify'),
+    path('batch/', BatchNotificationIngestView.as_view(), name='notification-batch'),
     path('', include(router.urls)),
 ]
