@@ -1,0 +1,2 @@
+[console_scripts]
+notifier-service = notifier_service.cli:main

@@ -20,7 +20,7 @@ class DashboardStatsView(APIView):
       - Notification delivery success vs failure rates
       - Recent activity feed
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, *args, **kwargs):
         user = request.user
@@ -28,13 +28,13 @@ class DashboardStatsView(APIView):
         day_ago = now - timedelta(days=1)
         week_ago = now - timedelta(days=7)
 
-        # Base querysets filtered by ownership unless admin
+        # Base querysets
         notif_qs = Notification.objects.all()
         delivery_qs = DeliveryAttempt.objects.all()
         proj_qs = Project.objects.all()
         server_qs = Server.objects.all()
 
-        if not (user.is_staff or user.is_superuser):
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
             notif_qs = notif_qs.filter(project__owner=user)
             delivery_qs = delivery_qs.filter(notification__project__owner=user)
             proj_qs = proj_qs.filter(owner=user)

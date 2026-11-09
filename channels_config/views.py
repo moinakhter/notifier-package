@@ -1,4 +1,5 @@
 """Views for channel configuration and test connections."""
+from django.db import models
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -26,7 +27,7 @@ from .services import (
 
 
 class BaseChannelViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['project', 'is_active', 'is_verified']
     search_fields = ['name']
@@ -34,9 +35,9 @@ class BaseChannelViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = self.model.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
+        return qs
 
 
 class EmailConfigurationViewSet(BaseChannelViewSet):

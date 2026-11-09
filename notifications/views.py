@@ -46,31 +46,27 @@ from .pipeline import IngestionPipeline
 class NotificationIngestView(APIView):
     """
     Non-blocking endpoint for client applications to ingest notifications.
-    Clients authenticate via API Key header:
-      X-API-Key: <key>
+    No authentication required by default. Clients can optionally authenticate
+    via API Key header: X-API-Key: <key>
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request, *args, **kwargs):
         serializer = NotificationIngestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Determine project from API key auth or explicit query/body parameter
+        # Determine project from API key auth or explicit query/body parameter, or fallback to default project
         project = getattr(request, 'project', None)
         if not project:
             project_id = request.data.get('project') or request.query_params.get('project')
             if project_id:
-                project = Project.objects.filter(id=project_id, owner=request.user).first()
-            if not project:
-                # Default to first active project of the authenticated user
+                project = Project.objects.filter(id=project_id).first()
+            if not project and request.user.is_authenticated:
                 project = Project.objects.filter(owner=request.user, is_active=True).first()
-
-        if not project:
-            return Response(
-                {'error': 'No active project identified for this notification.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            if not project:
+                # Default project: creates automatically on zero-config installs
+                project = Project.get_default_project()
 
         # Lookup or register server if hostname provided
         server = None
@@ -115,8 +111,9 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Search and filter notification history. View full tracebacks and delivery attempts.
     Acknowledge and resolve errors. Export filtered records.
+    No authentication required by default.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'project',
@@ -138,7 +135,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Notification.objects.select_related('project', 'server', 'acknowledged_by', 'resolved_by')
-        if not (user.is_staff or user.is_superuser):
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
             qs = qs.filter(project__owner=user)
 
         # Date filtering
@@ -153,15 +150,16 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
-        """Mark notification as acknowledged by current user."""
+        """Mark notification as acknowledged."""
         notif = self.get_object()
-        notif.acknowledge(user=request.user)
+        user = request.user if request.user.is_authenticated else None
+        notif.acknowledge(user=user)
         return Response({
             'status': 'success',
             'message': 'Notification acknowledged.',
             'is_acknowledged': notif.is_acknowledged,
             'acknowledged_at': notif.acknowledged_at,
-            'acknowledged_by': request.user.username,
+            'acknowledged_by': user.username if user else 'anonymous',
         }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
@@ -172,13 +170,14 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         note = serializer.validated_data.get('note', '')
 
-        notif.resolve(user=request.user, note=note)
+        user = request.user if request.user.is_authenticated else None
+        notif.resolve(user=user, note=note)
         return Response({
             'status': 'success',
             'message': 'Notification resolved.',
             'is_resolved': notif.is_resolved,
             'resolved_at': notif.resolved_at,
-            'resolved_by': request.user.username,
+            'resolved_by': user.username if user else 'anonymous',
             'resolution_note': notif.resolution_note,
         }, status=status.HTTP_200_OK)
 
@@ -247,7 +246,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 class NotificationTemplateViewSet(viewsets.ModelViewSet):
     """CRUD viewset for notification templates."""
     serializer_class = NotificationTemplateSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['project', 'severity', 'is_active']
     search_fields = ['name', 'title_template', 'message_template']
@@ -255,15 +254,15 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = NotificationTemplate.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
+        return qs
 
 
 class RoutingRuleViewSet(viewsets.ModelViewSet):
     """CRUD viewset for custom notification routing rules."""
     serializer_class = RoutingRuleSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['project', 'severity', 'is_active']
     search_fields = ['name', 'description', 'service_name_pattern', 'title_pattern']
@@ -271,21 +270,21 @@ class RoutingRuleViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = RoutingRule.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
+        return qs
 
 
 class SeverityChannelSettingViewSet(viewsets.ModelViewSet):
     """CRUD viewset for project-wide channel enable/disable per severity."""
     serializer_class = SeverityChannelSettingSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['project', 'severity']
 
     def get_queryset(self):
         user = self.request.user
         qs = SeverityChannelSetting.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
+        return qs

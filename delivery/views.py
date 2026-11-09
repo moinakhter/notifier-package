@@ -14,7 +14,7 @@ class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
     """View delivery history and attempt logs across channels."""
 
     serializer_class = DeliveryAttemptSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['notification', 'channel', 'status', 'attempt_number']
     search_fields = ['recipient', 'error_message', 'notification__title']
@@ -23,16 +23,16 @@ class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = DeliveryAttempt.objects.select_related('notification', 'notification__project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(notification__project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(notification__project__owner=user)
+        return qs
 
 
 class DeadLetterEntryViewSet(viewsets.ModelViewSet):
     """Inspect and reprocess dead-letter queue entries."""
 
     serializer_class = DeadLetterEntrySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['channel', 'is_reprocessed']
     search_fields = ['recipient', 'last_error', 'notification__title']
@@ -41,9 +41,9 @@ class DeadLetterEntryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = DeadLetterEntry.objects.select_related('notification', 'notification__project')
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(notification__project__owner=user)
+        if user.is_authenticated and not (user.is_staff or user.is_superuser):
+            return qs.filter(notification__project__owner=user)
+        return qs
 
     @action(detail=True, methods=['post'])
     def reprocess(self, request, pk=None):

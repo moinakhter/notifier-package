@@ -65,10 +65,12 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-# Default to SQLite for local development, easily switch to PostgreSQL via env vars
+# Default: Zero-configuration SQLite embedded out-of-the-box.
+# Users can easily switch to PostgreSQL, MySQL, or specify custom SQLITE_PATH via environment variables.
+DB_ENGINE = config('DB_ENGINE', default='sqlite')
 USE_POSTGRES = config('USE_POSTGRES', default=False, cast=bool)
 
-if USE_POSTGRES:
+if DB_ENGINE.lower() in ('postgres', 'postgresql') or USE_POSTGRES:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -79,11 +81,23 @@ if USE_POSTGRES:
             'PORT': config('DB_PORT', default='5432'),
         }
     }
+elif DB_ENGINE.lower() == 'mysql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': config('DB_NAME', default='notifier_service'),
+            'USER': config('DB_USER', default='root'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='3306'),
+        }
+    }
 else:
+    SQLITE_PATH = config('SQLITE_PATH', default=str(BASE_DIR / 'db.sqlite3'))
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': SQLITE_PATH,
         }
     }
 
@@ -128,7 +142,7 @@ CELERY_TASK_SOFT_TIME_LIMIT = 240
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
 
-# DRF
+# DRF: Free open access by default (no authentication required)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'projects.authentication.APIKeyAuthentication',
@@ -136,7 +150,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.BasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',

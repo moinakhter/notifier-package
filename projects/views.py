@@ -1,4 +1,5 @@
 """Views for project and API key management."""
+from django.db import models
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -18,9 +19,10 @@ from .serializers import (
 class ProjectViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing projects across development, staging, and production.
+    No authentication required by default.
     """
     serializer_class = ProjectSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['environment', 'is_active']
     search_fields = ['name', 'slug', 'description']
@@ -28,20 +30,22 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff or user.is_superuser:
+        if not user.is_authenticated or user.is_staff or user.is_superuser:
             return Project.objects.all().prefetch_related('servers', 'api_keys')
-        return Project.objects.filter(owner=user).prefetch_related('servers', 'api_keys')
+        return Project.objects.filter(models.Q(owner=user) | models.Q(owner__isnull=True)).prefetch_related('servers', 'api_keys')
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        owner = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(owner=owner)
 
 
 class ServerViewSet(viewsets.ModelViewSet):
     """
     ViewSet for registering and managing servers within projects.
+    No authentication required by default.
     """
     serializer_class = ServerSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['project', 'environment', 'is_active']
     search_fields = ['name', 'hostname', 'ip_address']
@@ -50,16 +54,17 @@ class ServerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Server.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
+        if not user.is_authenticated or user.is_staff or user.is_superuser:
             return qs
-        return qs.filter(project__owner=user)
+        return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
 
 
 class APIKeyViewSet(viewsets.ModelViewSet):
     """
     ViewSet for creating, listing, rotating, and revoking API keys.
+    No authentication required by default.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['project', 'is_active']
     search_fields = ['name', 'prefix']
@@ -75,9 +80,9 @@ class APIKeyViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = APIKey.objects.select_related('project')
-        if user.is_staff or user.is_superuser:
+        if not user.is_authenticated or user.is_staff or user.is_superuser:
             return qs
-        return qs.filter(project__owner=user)
+        return qs.filter(models.Q(project__owner=user) | models.Q(project__owner__isnull=True))
 
     @action(detail=True, methods=['post'])
     def rotate(self, request, pk=None):

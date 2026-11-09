@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notifier-service-hub"
+version = "1.0.0"
+description = "Free, open-source multi-channel notification and error alert engine with embedded SQLite and zero-auth access."
+readme = "README.md"
+authors = [
+    { name = "Notifier Service Authors", email = "authors@notifier-service.local" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Django",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: System :: Monitoring",
+]
+keywords = [
+    "notification",
+    "alerting",
+    "monitoring",
+    "email",
+    "telegram",
+    "whatsapp",
+    "instagram",
+    "django",
+    "sqlite",
+    "free",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "Django>=5.0,<6.2",
+    "djangorestframework>=3.14,<4.0",
+    "django-filter>=23.0",
+    "django-cors-headers>=4.0",
+    "celery[redis]>=5.3,<6.0",
+    "redis>=5.0,<9.0",
+    "requests>=2.30",
+    "python-decouple>=3.8",
+    "whitenoise>=6.5",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9"]
+mysql = ["mysqlclient>=2.2"]
+all = [
+    "psycopg2-binary>=2.9",
+    "mysqlclient>=2.2",
+    "gunicorn>=22.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/notifier-service"
+Documentation = "https://github.com/example/notifier-service#readme"
+Repository = "https://github.com/example/notifier-service"
+
+[project.scripts]
+notifier-service = "notifier_service.cli:main"
+
+[tool.setuptools]
+packages = [
+    "config",
+    "config.settings",
+    "projects",
+    "projects.migrations",
+    "notifications",
+    "notifications.migrations",
+    "notifications.management",
+    "notifications.management.commands",
+    "channels_config",
+    "channels_config.migrations",
+    "delivery",
+    "delivery.migrations",
+    "dashboard",
+    "dashboard.migrations",
+    "notifier_service",
+]
+
+[tool.setuptools.package-data]
+"*" = ["templates/*", "templates/*/*"]

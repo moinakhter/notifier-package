@@ -105,4 +105,6 @@ class ProjectSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             validated_data['owner'] = request.user
+        else:
+            validated_data['owner'] = None
         return super().create(validated_data)

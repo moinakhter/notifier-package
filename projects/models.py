@@ -25,6 +25,8 @@ class Project(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='projects',
+        null=True,
+        blank=True,
     )
     environment = models.CharField(
         max_length=20,
@@ -44,6 +46,20 @@ class Project(models.Model):
 
     def __str__(self):
         return f'{self.name} [{self.environment}]'
+
+    @classmethod
+    def get_default_project(cls) -> 'Project':
+        """Get or create the default zero-config project."""
+        project, _ = cls.objects.get_or_create(
+            slug='default-project',
+            defaults={
+                'name': 'Default Project',
+                'environment': Environment.DEVELOPMENT,
+                'description': 'Zero-configuration default project for unauthenticated ingestion',
+                'rate_limit': 1000,
+            },
+        )
+        return project
 
     def save(self, *args, **kwargs):
         if not self.slug:
