@@ -1,0 +1,35 @@
+# Ignore all directories starting with . (dot folders)
+.*/
+
+# Ignore specific dotfiles
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Whitelist .gitignore and example environment file
+!.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Databases & local logs
+*.sqlite3
+*.log
+
+# IDE & Virtual Environments
+.venv/
+venv/
+ENV/
+.idea/
+.vscode/
+.agent/
