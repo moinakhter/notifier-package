@@ -183,8 +183,8 @@ If multiple servers want to share the same database directly:
 ## 5. Publishing to PyPI
 
 The distribution files in `dist/` have been verified:
-- Source distribution: `dist/notifier_service_hub-1.0.0.tar.gz`
-- Binary wheel: `dist/notifier_service_hub-1.0.0-py3-none-any.whl`
+- Source distribution: `dist/notifier_service_hub-1.0.1.tar.gz`
+- Binary wheel: `dist/notifier_service_hub-1.0.1-py3-none-any.whl`
 
 ### Upload Command
 ```bash

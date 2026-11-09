@@ -17,7 +17,7 @@ def main():
     if len(sys.argv) == 1:
         # Default action: migrate SQLite and start server on 0.0.0.0:8000
         print("=" * 60)
-        print("  Notifier Service v1.0.0 (Free & Open Source)")
+        print("  Notifier Service v1.0.1 (Free & Open Source)")
         print("  Database: SQLite (default)")
         print("  Authentication: Disabled (Open access)")
         print("  Dashboard: http://127.0.0.1:8000/")
