@@ -1,7 +1,0 @@
-channels_config
-config
-dashboard
-delivery
-notifications
-notifier_service
-projects
