@@ -625,3 +625,76 @@ class NotifierServiceFeatureTests(TestCase):
         res = self.client.get(f'/api/v1/notifications/severity-settings/project-matrix/?project={self.project.id}')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.data['settings']), 5)
+        self.assertEqual(res.data['log_retention_days'], 15)
+
+    def test_log_retention_policy_and_pruning(self):
+        """Test default 15-day log retention and automatic pruning mechanism."""
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.core.management import call_command
+        from delivery.tasks import prune_expired_logs_task
+
+        # 1. Verify default retention is 15 days
+        self.assertEqual(self.project.log_retention_days, 15)
+
+        now = timezone.now()
+        # Notification 20 days ago (expired)
+        old_notif = Notification.objects.create(
+            project=self.project,
+            title='Old Resolved Error',
+            severity=Severity.ERROR,
+            is_resolved=True,
+        )
+        Notification.objects.filter(pk=old_notif.pk).update(created_at=now - timedelta(days=20))
+
+        # Notification 2 days ago (active, within 15-day window)
+        recent_notif = Notification.objects.create(
+            project=self.project,
+            title='Recent Error',
+            severity=Severity.ERROR,
+            is_resolved=True,
+        )
+        Notification.objects.filter(pk=recent_notif.pk).update(created_at=now - timedelta(days=2))
+
+        # Unresolved critical 25 days ago (protected by default)
+        unresolved_old = Notification.objects.create(
+            project=self.project,
+            title='Unresolved Fatal Outage',
+            severity=Severity.CRITICAL,
+            is_resolved=False,
+        )
+        Notification.objects.filter(pk=unresolved_old.pk).update(created_at=now - timedelta(days=25))
+
+        # 2. Test prune_expired_logs method
+        pruned_count = self.project.prune_expired_logs(keep_unresolved=True)
+        self.assertEqual(pruned_count, 1)  # Only old_notif deleted
+
+        self.assertFalse(Notification.objects.filter(pk=old_notif.pk).exists())
+        self.assertTrue(Notification.objects.filter(pk=recent_notif.pk).exists())
+        self.assertTrue(Notification.objects.filter(pk=unresolved_old.pk).exists())
+
+        # 3. Test management command prune_logs
+        call_command('prune_logs', project=self.project.slug, include_unresolved=True)
+        # Now unresolved_old is also purged because include_unresolved=True
+        self.assertFalse(Notification.objects.filter(pk=unresolved_old.pk).exists())
+        self.assertTrue(Notification.objects.filter(pk=recent_notif.pk).exists())
+
+        # 4. Test Celery periodic task
+        result = prune_expired_logs_task()
+        self.assertIn('total_pruned', result)
+
+        # 5. Test REST API project prune endpoint
+        res = self.client.post(f'/api/v1/projects/projects/{self.project.id}/prune-logs/')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('pruned_count', res.data)
+        self.assertEqual(res.data['log_retention_days'], 15)
+
+        # 6. Test Settings UI updates retention days
+        post_data = {
+            'project': str(self.project.id),
+            'log_retention_days': '30',
+        }
+        res = self.client.post('/settings/', post_data)
+        self.assertEqual(res.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.log_retention_days, 30)

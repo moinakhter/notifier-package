@@ -92,31 +92,48 @@ def dashboard_settings_view(request):
     success_message = None
 
     if request.method == 'POST':
-        # Update project settings
-        selected_project.notify_exceptions_only = 'notify_exceptions_only' in request.POST
-        selected_project.save(update_fields=['notify_exceptions_only', 'updated_at'])
+        action = request.POST.get('action', 'save_settings')
 
-        # Update per-severity channel settings
-        from notifications.models import SeverityChannelSetting
-        severities = [s.value for s in Severity]
-        for sev in severities:
-            email_key = f'email_{sev}'
-            tg_key = f'telegram_{sev}'
-            wa_key = f'whatsapp_{sev}'
-            ig_key = f'instagram_{sev}'
+        if action == 'prune_now':
+            count = selected_project.prune_expired_logs(keep_unresolved=True)
+            success_message = f"Log cleanup complete! Pruned {count} logs older than {selected_project.log_retention_days} days for '{selected_project.name}'."
+        else:
+            # Update project settings
+            selected_project.notify_exceptions_only = 'notify_exceptions_only' in request.POST
 
-            SeverityChannelSetting.objects.update_or_create(
-                project=selected_project,
-                severity=sev,
-                defaults={
-                    'email_enabled': email_key in request.POST,
-                    'telegram_enabled': tg_key in request.POST,
-                    'whatsapp_enabled': wa_key in request.POST,
-                    'instagram_enabled': ig_key in request.POST,
-                },
+            retention_raw = request.POST.get('log_retention_days')
+            if retention_raw is not None:
+                try:
+                    selected_project.log_retention_days = max(0, int(retention_raw))
+                except (ValueError, TypeError):
+                    pass
+
+            selected_project.save(update_fields=['notify_exceptions_only', 'log_retention_days', 'updated_at'])
+
+            # Update per-severity channel settings
+            from notifications.models import SeverityChannelSetting
+            severities = [s.value for s in Severity]
+            for sev in severities:
+                email_key = f'email_{sev}'
+                tg_key = f'telegram_{sev}'
+                wa_key = f'whatsapp_{sev}'
+                ig_key = f'instagram_{sev}'
+
+                SeverityChannelSetting.objects.update_or_create(
+                    project=selected_project,
+                    severity=sev,
+                    defaults={
+                        'email_enabled': email_key in request.POST,
+                        'telegram_enabled': tg_key in request.POST,
+                        'whatsapp_enabled': wa_key in request.POST,
+                        'instagram_enabled': ig_key in request.POST,
+                    },
+                )
+
+            success_message = (
+                f"Notification settings for '{selected_project.name}' saved! "
+                f"Log retention is set to {selected_project.log_retention_days} days."
             )
-
-        success_message = f"Notification settings for '{selected_project.name}' saved! Channel alerts will strictly dispatch for your selected options."
 
     # Ensure matrix exists
     settings_matrix = selected_project.get_or_create_severity_settings()

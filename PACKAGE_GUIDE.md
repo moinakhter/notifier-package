@@ -182,7 +182,12 @@ Visit `http://your-server:8000/settings/` in any browser:
 1. **Select your Project** from the dropdown.
 2. **Toggle "Only Alert on Actual Exceptions"**:
    - When enabled, channel alerts (Email, Telegram, WhatsApp) are **only** sent if the log contains an actual Python/application exception, traceback, or `error_type`. Clean logs without an error traceback are silently recorded in the database without spamming your inbox.
-3. **Customize the Severity Matrix**:
+3. **Log Retention Period (Default: 15 Days)**:
+   - Configure the number of days notification logs and delivery history are kept in the database.
+   - Defaults to **15 days**. Set to `0` to retain logs indefinitely.
+   - Background Celery beat task automatically prunes expired logs daily.
+   - Click **"Prune Expired Logs Now"** anytime to immediately clear expired records.
+4. **Customize the Severity Matrix**:
    - Choose exactly which channels (Email, Telegram, WhatsApp, Instagram) are enabled for each level:
      - 🔴 **CRITICAL**: Fatal crashes & system outages
      - 🟠 **ERROR**: Caught exceptions & database/network failures

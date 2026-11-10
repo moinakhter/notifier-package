@@ -38,6 +38,22 @@ class ProjectViewSet(viewsets.ModelViewSet):
         owner = self.request.user if self.request.user.is_authenticated else None
         serializer.save(owner=owner)
 
+    @action(detail=True, methods=['post'], url_path='prune-logs')
+    def prune_logs(self, request, pk=None):
+        """
+        Manually trigger log pruning for this project according to its retention policy.
+        Optional body param: include_unresolved=true (default false to protect open errors).
+        """
+        project = self.get_object()
+        include_unresolved = bool(request.data.get('include_unresolved', False))
+        deleted_count = project.prune_expired_logs(keep_unresolved=not include_unresolved)
+        return Response({
+            'project_id': str(project.id),
+            'project_name': project.name,
+            'log_retention_days': project.log_retention_days,
+            'pruned_count': deleted_count,
+        })
+
 
 class ServerViewSet(viewsets.ModelViewSet):
     """

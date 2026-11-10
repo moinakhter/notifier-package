@@ -107,6 +107,27 @@
         </div>
       </div>
 
+      <!-- Option 2: Log Retention Policy (Default 15 Days) -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="space-y-1 pr-4">
+            <h3 class="text-base font-semibold text-white flex items-center">
+              <i class="fa-solid fa-calendar-days text-sky-400 mr-2"></i> Log Retention Period (Days)
+            </h3>
+            <p class="text-sm text-slate-400">
+              Notification logs and delivery history older than this threshold are automatically pruned daily to keep your database fast and lightweight.
+              <span class="text-slate-300 font-medium">Default is 15 days.</span> Set to <code class="text-indigo-300 bg-slate-900 px-1.5 py-0.5 rounded">0</code> to keep logs indefinitely.
+            </p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <div class="relative w-36">
+              <input type="number" name="log_retention_days" min="0" max="3650" value="{{ selected_project.log_retention_days }}" class="w-full bg-slate-900 border border-slate-700 text-white text-center rounded-xl py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 font-bold text-lg">
+              <span class="absolute right-3 top-2.5 text-xs text-slate-400 pointer-events-none">days</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Option 2: Severity vs Channel Matrix -->
       <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
         <div class="mb-5">
@@ -182,8 +203,11 @@
           </table>
         </div>
 
-        <div class="mt-6 flex justify-end">
-          <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center">
+        <div class="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <button type="submit" name="action" value="prune_now" onclick="return confirm('Prune all notification logs older than {{ selected_project.log_retention_days }} days for {{ selected_project.name }}?')" class="text-xs bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-800/60 px-4 py-2.5 rounded-xl transition flex items-center">
+            <i class="fa-solid fa-trash-can mr-2 text-rose-400"></i> Prune Expired Logs Now
+          </button>
+          <button type="submit" name="action" value="save_settings" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center">
             <i class="fa-solid fa-floppy-disk mr-2"></i> Save Notification Settings
           </button>
         </div>

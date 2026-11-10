@@ -357,6 +357,43 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="notifications_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         return response
 
+    @action(detail=False, methods=['post'], url_path='prune')
+    def prune_expired(self, request):
+        """
+        Prune notification logs older than project retention policy (default: 15 days).
+        Query or body params:
+          - project: optional project slug or UUID (if omitted, prunes across all projects)
+          - include_unresolved: optional boolean (default false, protects open error alerts)
+        """
+        proj_identifier = request.data.get('project') or request.query_params.get('project')
+        include_unresolved = bool(request.data.get('include_unresolved', False))
+
+        if proj_identifier:
+            proj_str = str(proj_identifier).strip()
+            target_proj = Project.objects.filter(slug=proj_str).first() or Project.objects.filter(name__iexact=proj_str).first()
+            if not target_proj:
+                try:
+                    import uuid as _uuid
+                    _uuid.UUID(proj_str)
+                    target_proj = Project.objects.filter(id=proj_str).first()
+                except (ValueError, AttributeError):
+                    pass
+            if not target_proj:
+                return Response({'error': f'Project "{proj_identifier}" not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            deleted = target_proj.prune_expired_logs(keep_unresolved=not include_unresolved)
+            return Response({
+                'project': target_proj.name,
+                'retention_days': target_proj.log_retention_days,
+                'pruned_count': deleted,
+            })
+
+        results = Project.prune_all_expired_logs(keep_unresolved=not include_unresolved)
+        return Response({
+            'total_pruned': sum(results.values()),
+            'projects': results,
+        })
+
 
 class NotificationTemplateViewSet(viewsets.ModelViewSet):
     """CRUD viewset for notification templates."""
@@ -439,9 +476,19 @@ class SeverityChannelSettingViewSet(viewsets.ModelViewSet):
             project = Project.get_default_project()
 
         if request.method == 'POST':
+            updated_fields = ['updated_at']
             if 'notify_exceptions_only' in request.data:
                 project.notify_exceptions_only = bool(request.data['notify_exceptions_only'])
-                project.save(update_fields=['notify_exceptions_only', 'updated_at'])
+                updated_fields.append('notify_exceptions_only')
+
+            if 'log_retention_days' in request.data:
+                try:
+                    project.log_retention_days = max(0, int(request.data['log_retention_days']))
+                    updated_fields.append('log_retention_days')
+                except (ValueError, TypeError):
+                    pass
+
+            project.save(update_fields=updated_fields)
 
             settings_data = request.data.get('settings', [])
             for item in settings_data:
@@ -465,5 +512,6 @@ class SeverityChannelSettingViewSet(viewsets.ModelViewSet):
             'project_id': str(project.id),
             'project_name': project.name,
             'notify_exceptions_only': project.notify_exceptions_only,
+            'log_retention_days': project.log_retention_days,
             'settings': serializer.data,
         })

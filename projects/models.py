@@ -38,6 +38,10 @@ class Project(models.Model):
         default=False,
         help_text='Only dispatch channel notifications when an actual exception or traceback is captured',
     )
+    log_retention_days = models.IntegerField(
+        default=15,
+        help_text='Number of days to retain notification logs. Set to 0 to keep logs indefinitely. Default: 15 days.',
+    )
     rate_limit = models.IntegerField(
         default=100,
         help_text='Maximum notifications per minute',
@@ -50,6 +54,39 @@ class Project(models.Model):
 
     def __str__(self):
         return f'{self.name} [{self.environment}]'
+
+    def prune_expired_logs(self, keep_unresolved: bool = True) -> int:
+        """
+        Delete notification logs older than this project's log_retention_days.
+        Default is 15 days. If log_retention_days is 0, retention is unlimited (no logs pruned).
+        If keep_unresolved is True, unresolved CRITICAL/ERROR alerts are preserved for safety.
+        Returns the number of deleted notifications.
+        """
+        if self.log_retention_days <= 0:
+            return 0
+
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=self.log_retention_days)
+        qs = self.notifications.filter(created_at__lt=cutoff)
+        if keep_unresolved:
+            qs = qs.exclude(is_resolved=False, severity__in=['CRITICAL', 'ERROR'])
+
+        count, _ = qs.delete()
+        return count
+
+    @classmethod
+    def prune_all_expired_logs(cls, keep_unresolved: bool = True) -> dict[str, int]:
+        """
+        Prune expired logs across all active projects according to each project's
+        log_retention_days (default: 15 days).
+        Returns a dict of {project_slug: deleted_count}.
+        """
+        results = {}
+        for proj in cls.objects.filter(is_active=True):
+            deleted = proj.prune_expired_logs(keep_unresolved=keep_unresolved)
+            if deleted > 0:
+                results[proj.slug] = deleted
+        return results
 
     def get_or_create_severity_settings(self):
         """

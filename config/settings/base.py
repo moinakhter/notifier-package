@@ -141,6 +141,15 @@ CELERY_TASK_TIME_LIMIT = 300
 CELERY_TASK_SOFT_TIME_LIMIT = 240
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
+CELERY_BEAT_SCHEDULE = {
+    'prune-expired-notification-logs-daily': {
+        'task': 'delivery.tasks.prune_expired_logs_task',
+        'schedule': 86400.0,  # Run daily (every 24 hours)
+    },
+}
+
+# Log Retention Policy (Default: 15 days)
+DEFAULT_LOG_RETENTION_DAYS = config('DEFAULT_LOG_RETENTION_DAYS', default=15, cast=int)
 
 # DRF: Free open access by default (no authentication required)
 REST_FRAMEWORK = {

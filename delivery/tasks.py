@@ -297,3 +297,16 @@ def reprocess_dead_letter_task(dlq_id: str):
         return {'status': 'reprocessed', 'notification_id': str(dlq_entry.notification_id)}
     except DeadLetterEntry.DoesNotExist:
         return {'error': 'not_found'}
+
+
+@shared_task
+def prune_expired_logs_task(keep_unresolved: bool = True):
+    """
+    Automated background worker task to prune notification logs older than
+    each project's configured log_retention_days (default: 15 days).
+    """
+    from projects.models import Project
+    deleted_counts = Project.prune_all_expired_logs(keep_unresolved=keep_unresolved)
+    total_deleted = sum(deleted_counts.values())
+    logger.info(f'Pruned {total_deleted} expired notification logs across projects: {deleted_counts}')
+    return {'total_pruned': total_deleted, 'projects': deleted_counts}

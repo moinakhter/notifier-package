@@ -17,6 +17,9 @@ Designed to absorb **hundreds of thousands of logs per second** across distribut
   - **500,000+ logs/second** in-memory client absorption rate (`0.0007 ms` median call latency).
   - **9,000+ logs/second** server database write rate via bulk batch ingestion (`/api/v1/notifications/batch/`).
   - Automatic SQLite **WAL (Write-Ahead Logging)** mode with 15s busy timeout: **zero database lock contention** under heavy multi-server traffic spikes.
+- **Automated Log Retention (Default: 15 Days)**:
+  - Automatically prunes old notification logs and delivery attempts older than 15 days via scheduled Celery beat tasks or CLI.
+  - Fully configurable per project in the settings UI (`/settings/`) or REST API. Set to `0` to keep logs indefinitely.
 - **Customizable Error Alert Preferences**:
   - **Only Alert on Actual Exceptions**: Filter out informational messages; only send emails/telegrams when an actual uncaught exception or traceback occurs.
   - **Severity Channel Matrix**: Selectively route `CRITICAL`, `ERROR`, `WARNING`, `INFO`, and `SUCCESS` to specific channels (Email, Telegram, WhatsApp, Instagram).
@@ -56,7 +59,10 @@ Visit `http://localhost:8000/settings/`:
 1. **Select your Project** from the dropdown.
 2. **Toggle "Only Alert on Actual Exceptions"**:
    - When enabled, channel alerts (Email, Telegram, WhatsApp) are **only** sent if the log contains an actual Python/application exception or error traceback. Clean logs without tracebacks will be silently recorded in history without spamming your inbox.
-3. **Customize the Severity Matrix**:
+3. **Set Log Retention Period (Default: 15 Days)**:
+   - Configure how many days logs are retained in the database before automatic daily pruning.
+   - Click **"Prune Expired Logs Now"** to clean up instantly.
+4. **Customize the Severity Matrix**:
    - Choose exactly which channels (Email, Telegram, WhatsApp, Instagram) are enabled for each level:
      - 🔴 **CRITICAL**: Fatal crashes & system outages
      - 🟠 **ERROR**: Caught exceptions & database/network failures
