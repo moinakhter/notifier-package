@@ -59,12 +59,12 @@ def resolve_channels_for_notification(notification) -> list[str]:
         return sev_setting.get_channels()
 
     # 3. Default fallback by severity: ONLY send alerts for actual exceptions/errors!
-    # Warning, Info, and Success do NOT send channel alerts by default unless user enables them.
+    # Warning, Info, Debug, and Success do NOT send channel alerts by default unless user enables them.
     if notification.severity in (Severity.CRITICAL.value, Severity.CRITICAL):
         return ['EMAIL', 'TELEGRAM']
     elif notification.severity in (Severity.ERROR.value, Severity.ERROR):
         return ['EMAIL']
-    else:  # WARNING, INFO, SUCCESS
+    else:  # WARNING, INFO, DEBUG, SUCCESS
         return []
 
 

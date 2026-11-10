@@ -193,9 +193,10 @@ Visit `http://your-server:8000/settings/` in any browser:
      - 🟠 **ERROR**: Caught exceptions & database/network failures
      - 🟡 **WARNING**: Slow queries, memory warnings (silent by default)
      - 🔵 **INFO**: Operational logs (silent by default)
+     - 🟣 **DEBUG**: Detailed diagnostic logs & trace data (silent by default)
      - 🟢 **SUCCESS**: Deployments & backup confirmations (silent by default)
    - Uncheck all channels for any severity to mute it completely.
-4. Click **"Save Notification Settings"** to apply instantly.
+5. Click **"Save Notification Settings"** to apply instantly.
 
 ### Filtering in Client Code
 You can also filter logs directly at the source in your application:

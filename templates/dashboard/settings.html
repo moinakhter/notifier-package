@@ -168,6 +168,9 @@
                     {% elif s.severity == 'INFO' %}
                       <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">INFO</span>
                       <span class="text-xs text-slate-400">Operational logs & cron execution</span>
+                    {% elif s.severity == 'DEBUG' %}
+                      <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">DEBUG</span>
+                      <span class="text-xs text-slate-400">Low-level diagnostic data & trace payloads</span>
                     {% else %}
                       <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SUCCESS</span>
                       <span class="text-xs text-slate-400">Deployments & backup confirmations</span>

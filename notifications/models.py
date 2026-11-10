@@ -12,6 +12,7 @@ class Severity(models.TextChoices):
     ERROR = 'ERROR', 'Error'
     WARNING = 'WARNING', 'Warning'
     INFO = 'INFO', 'Info'
+    DEBUG = 'DEBUG', 'Debug'
     SUCCESS = 'SUCCESS', 'Success'
 
 

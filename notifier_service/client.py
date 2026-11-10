@@ -239,6 +239,8 @@ class NotifierLoggingHandler(logging.Handler):
                 sev = 'WARNING'
             elif record.levelno == logging.INFO:
                 sev = 'INFO'
+            elif record.levelno <= logging.DEBUG:
+                sev = 'DEBUG'
 
             tb = ''
             err_type = ''

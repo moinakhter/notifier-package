@@ -624,8 +624,52 @@ class NotifierServiceFeatureTests(TestCase):
         # Test REST API matrix endpoint
         res = self.client.get(f'/api/v1/notifications/severity-settings/project-matrix/?project={self.project.id}')
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(len(res.data['settings']), 5)
+        self.assertEqual(len(res.data['settings']), 6)
         self.assertEqual(res.data['log_retention_days'], 15)
+
+    def test_debug_severity_handling_and_logging_integration(self):
+        """Test DEBUG severity ingestion, default silent routing, and logger mapping."""
+        from delivery.tasks import resolve_channels_for_notification
+        from notifier_service.client import NotifierLoggingHandler, NotifierClient
+        import logging
+
+        # 1. Verify DEBUG severity is silent by default
+        debug_notif = Notification.objects.create(
+            project=self.project,
+            title='Diagnostic variable dump',
+            severity=Severity.DEBUG,
+        )
+        self.assertEqual(resolve_channels_for_notification(debug_notif), [])
+
+        # 2. Verify custom matrix allows enabling channels for DEBUG
+        SeverityChannelSetting.objects.create(
+            project=self.project,
+            severity=Severity.DEBUG,
+            email_enabled=True,
+            telegram_enabled=False,
+            whatsapp_enabled=False,
+            instagram_enabled=False,
+        )
+        self.assertEqual(resolve_channels_for_notification(debug_notif), ['EMAIL'])
+
+        # 3. Verify NotifierLoggingHandler emits DEBUG level
+        with patch.object(NotifierClient, '_send_batch_request') as mock_send:
+            handler = NotifierLoggingHandler(
+                endpoint='http://testserver',
+                project='ecommerce-platform',
+                level=logging.DEBUG,
+            )
+            logger = logging.getLogger('test_debug_logger')
+            logger.setLevel(logging.DEBUG)
+            logger.addHandler(handler)
+
+            logger.debug('Database query execution time: 0.4ms')
+            handler.client.flush()
+
+            mock_send.assert_called_once()
+            call_batch = mock_send.call_args[0][0]
+            self.assertEqual(call_batch[0]['severity'], 'DEBUG')
+            self.assertIn('Database query execution time', call_batch[0]['message'])
 
     def test_log_retention_policy_and_pruning(self):
         """Test default 15-day log retention and automatic pruning mechanism."""

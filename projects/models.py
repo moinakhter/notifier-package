@@ -104,6 +104,7 @@ class Project(models.Model):
             Severity.ERROR.value: {'email_enabled': True, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
             Severity.WARNING.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
             Severity.INFO.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
+            Severity.DEBUG.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
             Severity.SUCCESS.value: {'email_enabled': False, 'telegram_enabled': False, 'whatsapp_enabled': False, 'instagram_enabled': False},
         }
         for sev_choice, defaults in default_configs.items():

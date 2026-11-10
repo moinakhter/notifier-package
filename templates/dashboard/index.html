@@ -219,6 +219,8 @@
                   <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">WARNING</span>
                 {% elif n.severity == 'INFO' %}
                   <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">INFO</span>
+                {% elif n.severity == 'DEBUG' %}
+                  <span class="px-2 py-0.5 rounded text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">DEBUG</span>
                 {% else %}
                   <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SUCCESS</span>
                 {% endif %}
