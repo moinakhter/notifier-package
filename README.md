@@ -67,7 +67,10 @@ Visit `http://localhost:8000/settings/`:
 3. **Set Log Retention Period (Default: 15 Days)**:
    - Configure how many days logs are retained in the database before automatic daily pruning.
    - Click **"Prune Expired Logs Now"** to clean up instantly.
-4. **Customize the Severity Matrix**:
+4. **Email SMTP Setup & Live Test Delivery**:
+   - Configure SMTP Host, Port, TLS/SSL encryption, sender name/email, and alert recipients in the settings card.
+   - Enter your email address in the **Test Recipient** field and click **"Send Test Email Now"** to verify that SMTP credentials work and the test email arrives in your inbox before going live.
+5. **Customize the Severity Matrix**:
    - Choose exactly which channels (Email, Telegram, WhatsApp, Instagram) are enabled for each level:
      - 🔴 **CRITICAL**: Fatal crashes & system outages
      - 🟠 **ERROR**: Caught exceptions & database/network failures
@@ -76,7 +79,7 @@ Visit `http://localhost:8000/settings/`:
      - 🟣 **DEBUG**: Detailed diagnostic logs & trace data (silent by default)
      - 🟢 **SUCCESS**: Deployments & backup confirmations (silent by default)
    - Uncheck all channels for any severity to mute it completely.
-5. Click **"Save Notification Settings"** to apply instantly.
+6. Click **"Save Notification Settings"** to apply instantly.
 
 ### In Python Code (Client-Side Filtering)
 ```python

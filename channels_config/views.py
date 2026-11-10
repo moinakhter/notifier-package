@@ -48,13 +48,40 @@ class EmailConfigurationViewSet(BaseChannelViewSet):
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
         config = self.get_object()
-        success, message = EmailService.test_connection(config)
+        send_email = request.data.get('send_test_email', False)
+        recipient = request.data.get('recipient')
+        success, message = EmailService.test_connection(config, send_test_email=send_email, recipient=recipient)
         config.mark_tested(success, message)
         return Response({
             'success': success,
             'message': message,
             'is_verified': config.is_verified,
             'last_tested_at': config.last_tested_at,
+        }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='test-direct')
+    def test_direct(self, request):
+        """Test SMTP connection and optionally send a test email from raw input parameters."""
+        data = request.data
+        from types import SimpleNamespace
+        dummy_config = SimpleNamespace(
+            smtp_host=data.get('smtp_host', 'localhost'),
+            smtp_port=int(data.get('smtp_port', 587)),
+            smtp_username=data.get('smtp_username', ''),
+            smtp_password=data.get('smtp_password', ''),
+            use_tls=bool(data.get('use_tls', True)),
+            use_ssl=bool(data.get('use_ssl', False)),
+            from_email=data.get('from_email', 'noreply@example.com'),
+            from_name=data.get('from_name', 'Notifier Hub Test'),
+            recipients=[data.get('recipient')] if data.get('recipient') else [],
+            project=None,
+        )
+        send_email = bool(data.get('send_test_email', False))
+        recipient = data.get('recipient')
+        success, message = EmailService.test_connection(dummy_config, send_test_email=send_email, recipient=recipient)
+        return Response({
+            'success': success,
+            'message': message,
         }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
 
 

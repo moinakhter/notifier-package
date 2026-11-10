@@ -790,3 +790,139 @@ class NotifierServiceFeatureTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.project.refresh_from_db()
         self.assertEqual(self.project.log_retention_days, 30)
+
+    @patch('smtplib.SMTP')
+    def test_email_test_connection_and_search_features(self, mock_smtp):
+        """Test SMTP connection testing, live test delivery, and comprehensive search."""
+        # 1. Setup mock SMTP instance
+        instance = mock_smtp.return_value
+        instance.noop.return_value = (250, b'OK')
+        instance.sendmail.return_value = {}
+
+        email_config = EmailConfiguration.objects.create(
+            project=self.project,
+            smtp_host='smtp.mailgun.org',
+            smtp_port=587,
+            smtp_username='postmaster@example.com',
+            smtp_password='secretpassword',
+            from_email='alerts@example.com',
+            from_name='Notifier Bot',
+            recipients=['dev1@example.com', 'dev2@example.com'],
+            use_tls=True,
+            use_ssl=False,
+        )
+
+        # 2. Test EmailService.test_connection with send_test_email=True
+        from channels_config.services import EmailService
+        success, msg = EmailService.test_connection(email_config, send_test_email=True, recipient='oncall@example.com')
+        self.assertTrue(success)
+        self.assertIn('SMTP verified', msg)
+        self.assertIn('oncall@example.com', msg)
+        instance.sendmail.assert_called_once()
+
+        # 3. Test EmailConfigurationViewSet test_connection REST endpoint
+        res = self.client.post(
+            f'/api/v1/channels/email/{email_config.id}/test_connection/',
+            {'send_test_email': True, 'recipient': 'qa@example.com'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['success'])
+        self.assertIn('qa@example.com', res.data['message'])
+
+        # 4. Test Email direct test endpoint (raw test without saving first)
+        res_direct = self.client.post(
+            '/api/v1/channels/email/test-direct/',
+            {
+                'smtp_host': 'smtp.gmail.com',
+                'smtp_port': 587,
+                'smtp_username': 'user@gmail.com',
+                'smtp_password': 'app-password',
+                'use_tls': True,
+                'use_ssl': False,
+                'from_email': 'user@gmail.com',
+                'recipient': 'verify@example.com',
+                'send_test_email': True,
+            },
+            format='json',
+        )
+        self.assertEqual(res_direct.status_code, 200)
+        self.assertTrue(res_direct.data['success'])
+
+        # 5. Test Settings UI: save_email action
+        res_ui_save = self.client.post(
+            '/settings/',
+            {
+                'action': 'save_email',
+                'project': str(self.project.id),
+                'smtp_host': 'smtp.sendgrid.net',
+                'smtp_port': '587',
+                'use_tls': 'on',
+                'smtp_username': 'apikey',
+                'smtp_password': 'SG.secret',
+                'from_email': 'notifications@company.com',
+                'from_name': 'Company Notifier',
+                'recipients': 'ops@company.com, team@company.com',
+            },
+        )
+        self.assertEqual(res_ui_save.status_code, 200)
+        email_config.refresh_from_db()
+        self.assertEqual(email_config.smtp_host, 'smtp.sendgrid.net')
+        self.assertEqual(email_config.recipients, ['ops@company.com', 'team@company.com'])
+
+        # 6. Test Settings UI: test_email action
+        res_ui_test = self.client.post(
+            '/settings/',
+            {
+                'action': 'test_email',
+                'project': str(self.project.id),
+                'smtp_host': 'smtp.sendgrid.net',
+                'smtp_port': '587',
+                'use_tls': 'on',
+                'smtp_username': 'apikey',
+                'smtp_password': 'SG.secret',
+                'from_email': 'notifications@company.com',
+                'from_name': 'Company Notifier',
+                'test_recipient': 'tester@company.com',
+            },
+        )
+        self.assertEqual(res_ui_test.status_code, 200)
+        self.assertIn('email_test_result', res_ui_test.context)
+        self.assertTrue(res_ui_test.context['email_test_result']['success'])
+
+        # 7. Test search filter on notifications (project name, server hostname, error type)
+        srv = Server.objects.create(
+            project=self.project,
+            name='Primary Web Server',
+            hostname='web-prod-01.us-east.aws',
+            ip_address='10.0.1.5',
+            environment=Environment.PRODUCTION,
+        )
+        n1 = Notification.objects.create(
+            project=self.project,
+            server=srv,
+            title='Database connection pool exhausted',
+            message='Fatal timeout connecting to PostgreSQL master pool',
+            severity=Severity.CRITICAL,
+            service_name='payment-gateway',
+            error_type='OperationalError',
+        )
+
+        # Search by server hostname
+        res_search_host = self.client.get('/api/v1/notifications/history/?search=web-prod-01')
+        self.assertEqual(res_search_host.status_code, 200)
+        results = res_search_host.data['results'] if 'results' in res_search_host.data else res_search_host.data
+        self.assertTrue(any(item['id'] == str(n1.id) for item in results))
+
+        # Search by error type
+        res_search_err = self.client.get('/api/v1/notifications/history/?search=OperationalError')
+        self.assertEqual(res_search_err.status_code, 200)
+        results = res_search_err.data['results'] if 'results' in res_search_err.data else res_search_err.data
+        self.assertTrue(any(item['id'] == str(n1.id) for item in results))
+
+        # Search by project name
+        res_search_proj = self.client.get(f'/api/v1/notifications/history/?search={self.project.name}')
+        self.assertEqual(res_search_proj.status_code, 200)
+        results = res_search_proj.data['results'] if 'results' in res_search_proj.data else res_search_proj.data
+        self.assertTrue(any(item['id'] == str(n1.id) for item in results))
+

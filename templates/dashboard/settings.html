@@ -50,20 +50,23 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-    <!-- Header with Project Selector -->
+    <!-- Header with Project Selector & Project Search Option -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6">
       <div>
         <h2 class="text-xl font-bold text-white flex items-center">
-          <i class="fa-solid fa-filter text-indigo-400 mr-2.5"></i> Error Notification & Filtering Settings
+          <i class="fa-solid fa-filter text-indigo-400 mr-2.5"></i> Notification & Delivery Channel Settings
         </h2>
         <p class="text-sm text-slate-400 mt-1">
-          Choose exactly which error severities trigger email, telegram, and other notifications. Silence warnings and info logs so you only get alerted when actual exceptions occur.
+          Configure email SMTP credentials, test delivery, and choose which error severities trigger outbound alerts.
         </p>
       </div>
 
-      <!-- Project Switcher -->
-      <form method="GET" action="/settings/" class="flex items-center space-x-3">
-        <label for="project-select" class="text-xs text-slate-400 uppercase font-semibold">Project:</label>
+      <!-- Project Switcher with Search -->
+      <form method="GET" action="/settings/" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div class="relative">
+          <input type="text" name="project_search" value="{{ project_search }}" placeholder="Search projects..." class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-500">
+          <i class="fa-solid fa-magnifying-glass text-slate-500 text-xs absolute left-2.5 top-2.5"></i>
+        </div>
         <select id="project-select" name="project" onchange="this.form.submit()" class="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium">
           {% for p in projects %}
           <option value="{{ p.id }}" {% if p.id == selected_project.id %}selected{% endif %}>
@@ -71,6 +74,11 @@
           </option>
           {% endfor %}
         </select>
+        {% if project_search %}
+        <a href="/settings/" class="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 flex items-center" title="Clear project search">
+          <i class="fa-solid fa-xmark mr-1"></i> Clear
+        </a>
+        {% endif %}
       </form>
     </div>
 
@@ -82,7 +90,140 @@
     </div>
     {% endif %}
 
-    <!-- Main Settings Form -->
+    {% if email_test_result %}
+    <!-- Email Test Feedback Alert -->
+    {% if email_test_result.success %}
+    <div class="bg-emerald-900/40 border border-emerald-500/60 rounded-xl p-4 flex items-start text-emerald-200 text-sm">
+      <i class="fa-solid fa-circle-check text-emerald-400 text-xl mr-3 mt-0.5"></i>
+      <div>
+        <div class="font-bold text-white text-base">Test Email Sent Successfully!</div>
+        <div class="mt-0.5 text-emerald-200">{{ email_test_result.message }}</div>
+        <div class="mt-1 text-xs text-emerald-300 font-mono">Recipient: {{ email_test_result.recipient }}</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="bg-rose-900/40 border border-rose-500/60 rounded-xl p-4 flex items-start text-rose-200 text-sm">
+      <i class="fa-solid fa-triangle-exclamation text-rose-400 text-xl mr-3 mt-0.5"></i>
+      <div>
+        <div class="font-bold text-white text-base">Email Configuration Test Failed</div>
+        <div class="mt-0.5 text-rose-200">{{ email_test_result.message }}</div>
+        <div class="mt-1 text-xs text-rose-300">Please verify your SMTP host, port, username, password, and SSL/TLS settings below.</div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- SECTION 1: EMAIL CONFIGURATION & TEST CONNECTION -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700 pb-4">
+        <div>
+          <h3 class="text-base font-semibold text-white flex items-center">
+            <i class="fa-solid fa-envelope text-sky-400 mr-2"></i> Email Notification & SMTP Setup
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">
+            Configure SMTP credentials for <strong class="text-slate-200">{{ selected_project.name }}</strong> and test email delivery in real-time.
+          </p>
+        </div>
+        <div>
+          {% if email_config and email_config.is_verified %}
+            <span class="inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              <i class="fa-solid fa-circle-check mr-1.5 text-emerald-400"></i> SMTP Verified
+              {% if email_config.last_tested_at %}<span class="ml-1 text-[10px] text-emerald-400/80 font-mono">({{ email_config.last_tested_at|date:"M d H:i" }})</span>{% endif %}
+            </span>
+          {% else %}
+            <span class="inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-400"></i> Not Verified Yet
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Email Configuration Form -->
+      <form method="POST" action="/settings/" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="project" value="{{ selected_project.id }}">
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- SMTP Host -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">SMTP Host</label>
+            <input type="text" name="smtp_host" value="{{ email_config.smtp_host|default:'' }}" placeholder="e.g. smtp.gmail.com or mail.internal" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-600 font-mono">
+          </div>
+
+          <!-- SMTP Port -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">SMTP Port</label>
+            <input type="number" name="smtp_port" value="{{ email_config.smtp_port|default:587 }}" placeholder="587 or 465" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+
+          <!-- Security Options -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Security / Encryption</label>
+            <div class="flex items-center space-x-5 pt-2">
+              <label class="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" name="use_tls" {% if not email_config or email_config.use_tls %}checked{% endif %} class="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500">
+                <span>Use TLS (STARTTLS)</span>
+              </label>
+              <label class="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" name="use_ssl" {% if email_config and email_config.use_ssl %}checked{% endif %} class="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500">
+                <span>Use SSL</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- SMTP Username -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">SMTP Username</label>
+            <input type="text" name="smtp_username" value="{{ email_config.smtp_username|default:'' }}" placeholder="e.g. user@domain.com or API key" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-600 font-mono">
+          </div>
+
+          <!-- SMTP Password -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">SMTP Password</label>
+            <input type="password" name="smtp_password" value="{{ email_config.smtp_password|default:'' }}" placeholder="••••••••••••" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-600 font-mono">
+          </div>
+
+          <!-- From Email -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">From Email Address</label>
+            <input type="email" name="from_email" value="{{ email_config.from_email|default:'alerts@example.com' }}" placeholder="alerts@yourdomain.com" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-600 font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- From Name -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">From Sender Name</label>
+            <input type="text" name="from_name" value="{{ email_config.from_name|default:'Notifier Alert Bot' }}" placeholder="Notifier Alert Bot" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+
+          <!-- Alert Recipients -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Default Alert Recipients (Comma-separated)</label>
+            <input type="text" name="recipients" value="{{ recipients_display }}" placeholder="e.g. dev@company.com, oncall@company.com" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-600 font-mono">
+          </div>
+        </div>
+
+        <!-- Test Email Action Bar -->
+        <div class="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-xl">
+          <div class="flex items-center space-x-2 flex-1 max-w-md">
+            <label class="text-xs uppercase font-semibold text-slate-400 whitespace-nowrap">Test Recipient:</label>
+            <input type="email" name="test_recipient" placeholder="your-email@example.com" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button type="submit" name="action" value="test_email" class="bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center">
+              <i class="fa-solid fa-paper-plane mr-2"></i> Send Test Email Now
+            </button>
+            <button type="submit" name="action" value="save_email" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center">
+              <i class="fa-solid fa-check mr-2"></i> Save Email Settings
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- SECTION 2: NOTIFICATION POLICIES & SEVERITY MATRIX -->
     <form method="POST" action="/settings/" class="space-y-6">
       {% csrf_token %}
       <input type="hidden" name="project" value="{{ selected_project.id }}">
@@ -128,7 +269,7 @@
         </div>
       </div>
 
-      <!-- Option 2: Severity vs Channel Matrix -->
+      <!-- Option 3: Severity vs Channel Matrix -->
       <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
         <div class="mb-5">
           <h3 class="text-base font-semibold text-white flex items-center">

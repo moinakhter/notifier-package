@@ -239,7 +239,16 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         'is_acknowledged',
         'is_resolved',
     ]
-    search_fields = ['title', 'message', 'service_name', 'error_type', 'traceback']
+    search_fields = [
+        'title',
+        'message',
+        'service_name',
+        'error_type',
+        'traceback',
+        'server__hostname',
+        'server__name',
+        'project__name',
+    ]
     ordering_fields = ['created_at', 'severity', 'status']
 
     def get_serializer_class(self):

@@ -5,6 +5,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import NamedTuple
+from django.utils import timezone
 import requests
 
 logger = logging.getLogger(__name__)
@@ -63,8 +64,8 @@ class EmailService:
         return results
 
     @classmethod
-    def test_connection(cls, config) -> tuple[bool, str]:
-        """Test SMTP server connectivity and authentication."""
+    def test_connection(cls, config, send_test_email: bool = False, recipient: str | None = None) -> tuple[bool, str]:
+        """Test SMTP server connectivity and authentication, optionally sending a test email."""
         try:
             if config.use_ssl:
                 server = smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=10)
@@ -75,6 +76,28 @@ class EmailService:
 
             if config.smtp_username and config.smtp_password:
                 server.login(config.smtp_username, config.smtp_password)
+
+            target = recipient or (config.recipients[0] if (hasattr(config, 'recipients') and config.recipients) else None)
+            if send_test_email and target:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = '✅ [Notifier Service] Test Email Verification'
+                msg['From'] = f'{getattr(config, "from_name", "Notifier Service")} <{config.from_email}>'
+                msg['To'] = target
+
+                proj_name = getattr(config.project, 'name', 'Notifier Hub') if hasattr(config, 'project') and config.project else 'Notifier Hub'
+                body = (
+                    "Hello,\n\n"
+                    "This is an automated test email from your Notifier Service Hub.\n"
+                    "Your SMTP email configuration is functioning correctly and is ready to deliver alerts!\n\n"
+                    f"Project: {proj_name}\n"
+                    f"SMTP Host: {config.smtp_host}:{config.smtp_port}\n"
+                    f"Timestamp: {timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+                    "— Notifier Service Hub"
+                )
+                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+                server.sendmail(config.from_email, [target], msg.as_string())
+                server.quit()
+                return True, f'SMTP verified! Test email successfully sent to {target}. Check your inbox.'
 
             server.noop()
             server.quit()
