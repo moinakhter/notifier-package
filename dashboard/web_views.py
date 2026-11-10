@@ -43,7 +43,7 @@ def dashboard_home_view(request):
     # Errors by project
     errors_by_project = list(
         notif_qs.filter(severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])
-        .values('project__name', 'project__environment')
+        .values('project__id', 'project__name', 'project__environment', 'project__log_retention_days')
         .annotate(error_count=Count('id'))
         .order_by('-error_count')[:5]
     )

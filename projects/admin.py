@@ -17,8 +17,9 @@ class ServerInline(admin.TabularInline):
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'environment', 'owner', 'is_active', 'created_at')
-    list_filter = ('environment', 'is_active')
+    list_display = ('name', 'slug', 'environment', 'log_retention_days', 'notify_exceptions_only', 'owner', 'is_active', 'created_at')
+    list_editable = ('log_retention_days', 'notify_exceptions_only', 'is_active')
+    list_filter = ('environment', 'is_active', 'notify_exceptions_only')
     search_fields = ('name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
     inlines = [APIKeyInline, ServerInline]

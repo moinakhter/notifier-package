@@ -125,6 +125,7 @@ class Project(models.Model):
                 'environment': Environment.DEVELOPMENT,
                 'description': 'Zero-configuration default project for unauthenticated ingestion',
                 'rate_limit': 1000,
+                'log_retention_days': 15,
             },
         )
         return project

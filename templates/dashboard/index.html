@@ -125,15 +125,21 @@
               <tr>
                 <th class="py-2.5">Project</th>
                 <th class="py-2.5">Env</th>
+                <th class="py-2.5">Retention</th>
                 <th class="py-2.5 text-right">Errors</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-800">
               {% for p in errors_by_project %}
               <tr>
-                <td class="py-3 font-medium text-slate-200">{{ p.project__name }}</td>
+                <td class="py-3 font-medium text-slate-200">
+                  <a href="/settings/?project={{ p.project__id }}" class="hover:text-indigo-400 transition">{{ p.project__name }}</a>
+                </td>
                 <td class="py-3">
                   <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">{{ p.project__environment }}</span>
+                </td>
+                <td class="py-3">
+                  <span class="text-xs px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/50 font-mono">{{ p.project__log_retention_days|default:15 }}d</span>
                 </td>
                 <td class="py-3 text-right text-rose-400 font-bold">{{ p.error_count }}</td>
               </tr>
