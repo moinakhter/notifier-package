@@ -21,6 +21,11 @@ A free, open-source, multi-channel notification and alert dispatching engine wit
   - `NotifierExceptionMiddleware`: Catch uncaught 500 errors in Django apps.
 - **Batch Ingestion Endpoint**: `/api/v1/notifications/batch/` absorbs thousands of logs per second in bulk.
 - **Flexible Database Switching**: Effortlessly switch to **PostgreSQL** or **MySQL** whenever scaling.
+- **Interactive Dashboard with Project & Server Filtering**:
+  - Filter logs live by **Project**, **Server**, **Severity** (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, `SUCCESS`), and **Keyword Search**.
+  - Dedicated **Logs as per Project** breakdown (totals, error counts, criticals, unresolved alerts).
+  - Dedicated **Logs as per Server** breakdown (hostnames, nodes, environments, server error counts).
+  - One-click filter links on every project and server badge.
 - **Zero-Authentication Open Mode**: Anyone can send alerts and access the dashboard immediately without logins or API keys.
 - **Multi-Channel**: Supports **Email (SMTP)**, **Telegram**, **WhatsApp Cloud API**, and **Instagram Messaging API**.
 - **High-Reliability**: Background queue, deduplication, grouping, automatic retries with exponential backoff, and dead-letter queue (DLQ).

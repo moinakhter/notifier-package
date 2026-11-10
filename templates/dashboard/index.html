@@ -55,7 +55,7 @@
       <!-- Total Notifications -->
       <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between text-slate-400">
-          <span class="text-xs font-semibold uppercase tracking-wider">Total Notifications</span>
+          <span class="text-xs font-semibold uppercase tracking-wider">Total Ingested</span>
           <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
             <i class="fa-solid fa-layer-group"></i>
           </div>
@@ -106,18 +106,268 @@
         </div>
         <div class="mt-3 flex items-baseline justify-between">
           <div class="text-3xl font-bold text-white">{{ projects.count }} <span class="text-sm font-normal text-slate-400">projects</span></div>
-          <span class="text-xs text-sky-400 font-medium">Multi-server</span>
+          <span class="text-xs text-sky-400 font-medium">{{ servers.count }} servers</span>
         </div>
       </div>
     </div>
 
-    <!-- Middle Grid: Errors by Project & Server -->
+    <!-- Navigation Tabs: Logs Stream / By Project / By Server -->
+    <div class="flex border-b border-slate-800 space-x-2">
+      <a href="/?tab=logs{% if selected_project %}&project={{ selected_project.id }}{% endif %}{% if selected_server %}&server={{ selected_server.id }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}" class="py-3 px-4 text-sm font-medium border-b-2 flex items-center {% if view_tab == 'logs' %}border-indigo-500 text-indigo-400 bg-slate-800/40 rounded-t-xl{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+        <i class="fa-solid fa-list-check mr-2"></i> Logs Feed & Explorer
+      </a>
+      <a href="/?tab=projects" class="py-3 px-4 text-sm font-medium border-b-2 flex items-center {% if view_tab == 'projects' %}border-indigo-500 text-indigo-400 bg-slate-800/40 rounded-t-xl{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+        <i class="fa-solid fa-diagram-project mr-2"></i> Logs as per Project
+        <span class="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-400 font-mono">{{ logs_by_project|length }}</span>
+      </a>
+      <a href="/?tab=servers" class="py-3 px-4 text-sm font-medium border-b-2 flex items-center {% if view_tab == 'servers' %}border-indigo-500 text-indigo-400 bg-slate-800/40 rounded-t-xl{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+        <i class="fa-solid fa-network-wired mr-2"></i> Logs as per Server
+        <span class="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-400 font-mono">{{ logs_by_server|length }}</span>
+      </a>
+    </div>
+
+    {% if view_tab == 'projects' %}
+    <!-- VIEW TAB: LOGS AS PER PROJECT -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center">
+            <i class="fa-solid fa-diagram-project text-indigo-400 mr-2"></i> Logs Breakdown by Project
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Aggregated logs, error rates, and retention policies per connected project.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
+            <tr>
+              <th class="py-3 px-4">Project Name</th>
+              <th class="py-3 px-4">Environment</th>
+              <th class="py-3 px-4 text-center">Retention</th>
+              <th class="py-3 px-4 text-center">Total Logs</th>
+              <th class="py-3 px-4 text-center">Errors</th>
+              <th class="py-3 px-4 text-center">Criticals</th>
+              <th class="py-3 px-4 text-center">Unresolved</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for p in logs_by_project %}
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-3.5 px-4 font-semibold text-slate-200 flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2.5"></span>
+                {{ p.project__name }}
+              </td>
+              <td class="py-3.5 px-4">
+                <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">{{ p.project__environment }}</span>
+              </td>
+              <td class="py-3.5 px-4 text-center">
+                <span class="text-xs px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/50 font-mono">{{ p.project__log_retention_days|default:15 }} days</span>
+              </td>
+              <td class="py-3.5 px-4 text-center font-bold text-white">{{ p.total_count }}</td>
+              <td class="py-3.5 px-4 text-center font-bold text-rose-400">{{ p.error_count }}</td>
+              <td class="py-3.5 px-4 text-center font-bold text-rose-500">{{ p.critical_count }}</td>
+              <td class="py-3.5 px-4 text-center">
+                {% if p.unresolved_count > 0 %}
+                  <span class="px-2 py-0.5 rounded text-xs font-semibold bg-rose-500/20 text-rose-300">{{ p.unresolved_count }} open</span>
+                {% else %}
+                  <span class="text-xs text-emerald-400"><i class="fa-solid fa-check mr-1"></i>All Clear</span>
+                {% endif %}
+              </td>
+              <td class="py-3.5 px-4 text-right space-x-2">
+                <a href="/?tab=logs&project={{ p.project__id }}" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition">
+                  <i class="fa-solid fa-filter mr-1"></i> View Logs
+                </a>
+                <a href="/settings/?project={{ p.project__id }}" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+                  <i class="fa-solid fa-sliders mr-1"></i> Settings
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-8 text-slate-500">No project logs recorded yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% elif view_tab == 'servers' %}
+    <!-- VIEW TAB: LOGS AS PER SERVER -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center">
+            <i class="fa-solid fa-network-wired text-sky-400 mr-2"></i> Logs Breakdown by Server
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Aggregated logs, error counts, and hostnames per registered remote server.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
+            <tr>
+              <th class="py-3 px-4">Server Name</th>
+              <th class="py-3 px-4">Hostname / Node</th>
+              <th class="py-3 px-4">Project</th>
+              <th class="py-3 px-4">Environment</th>
+              <th class="py-3 px-4 text-center">Total Logs</th>
+              <th class="py-3 px-4 text-center">Errors</th>
+              <th class="py-3 px-4 text-center">Criticals</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for s in logs_by_server %}
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-3.5 px-4 font-semibold text-slate-200 flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-500 mr-2.5"></span>
+                {{ s.server__name }}
+              </td>
+              <td class="py-3.5 px-4 font-mono text-xs text-slate-400">{{ s.server__hostname }}</td>
+              <td class="py-3.5 px-4 text-slate-300">{{ s.server__project__name }}</td>
+              <td class="py-3.5 px-4">
+                <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">{{ s.server__environment }}</span>
+              </td>
+              <td class="py-3.5 px-4 text-center font-bold text-white">{{ s.total_count }}</td>
+              <td class="py-3.5 px-4 text-center font-bold text-rose-400">{{ s.error_count }}</td>
+              <td class="py-3.5 px-4 text-center font-bold text-rose-500">{{ s.critical_count }}</td>
+              <td class="py-3.5 px-4 text-right">
+                <a href="/?tab=logs&server={{ s.server__id }}" class="text-xs bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg transition">
+                  <i class="fa-solid fa-filter mr-1"></i> View Logs
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-8 text-slate-500">No server logs recorded yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- VIEW TAB: LOGS STREAM WITH FILTERS -->
+
+    <!-- Interactive Filter Toolbar -->
+    <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 shadow-sm space-y-4">
+      <form method="GET" action="/" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <input type="hidden" name="tab" value="logs">
+
+        <!-- Filter by Project -->
+        <div>
+          <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">
+            <i class="fa-solid fa-diagram-project mr-1 text-indigo-400"></i> Project
+          </label>
+          <select name="project" onchange="this.form.submit()" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium">
+            <option value="">All Projects</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if selected_project and selected_project.id == p.id %}selected{% endif %}>
+              {{ p.name }} ({{ p.environment }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Filter by Server -->
+        <div>
+          <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">
+            <i class="fa-solid fa-server mr-1 text-sky-400"></i> Server
+          </label>
+          <select name="server" onchange="this.form.submit()" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium">
+            <option value="">All Servers</option>
+            {% for s in servers %}
+            <option value="{{ s.id }}" {% if selected_server and selected_server.id == s.id %}selected{% endif %}>
+              {{ s.name }} ({{ s.hostname }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Filter by Severity -->
+        <div>
+          <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">
+            <i class="fa-solid fa-tags mr-1 text-amber-400"></i> Severity
+          </label>
+          <select name="severity" onchange="this.form.submit()" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium">
+            <option value="">All Severities</option>
+            {% for sev in severities %}
+            <option value="{{ sev }}" {% if selected_severity == sev %}selected{% endif %}>
+              {{ sev }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Keyword Search -->
+        <div>
+          <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">
+            <i class="fa-solid fa-magnifying-glass mr-1 text-slate-400"></i> Search
+          </label>
+          <input type="text" name="q" value="{{ search_query }}" placeholder="Title, error, traceback..." class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-500">
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2">
+          <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm py-2 px-3 rounded-xl transition shadow flex items-center justify-center">
+            <i class="fa-solid fa-filter mr-1.5"></i> Filter
+          </button>
+          {% if active_filters %}
+          <a href="/?tab=logs" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm py-2 px-3 rounded-xl transition" title="Clear all filters">
+            <i class="fa-solid fa-rotate-left"></i>
+          </a>
+          {% endif %}
+        </div>
+      </form>
+
+      {% if active_filters %}
+      <!-- Active Filter Tags / Pills -->
+      <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800 text-xs">
+        <span class="text-slate-400 font-semibold">Active Filters:</span>
+        {% if active_filters.project %}
+        <span class="inline-flex items-center bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg">
+          <i class="fa-solid fa-diagram-project mr-1.5"></i> Project: {{ active_filters.project }}
+          <a href="/?tab=logs{% if selected_server %}&server={{ selected_server.id }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="ml-1.5 hover:text-white"><i class="fa-solid fa-xmark"></i></a>
+        </span>
+        {% endif %}
+        {% if active_filters.server %}
+        <span class="inline-flex items-center bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-1 rounded-lg">
+          <i class="fa-solid fa-server mr-1.5"></i> Server: {{ active_filters.server }}
+          <a href="/?tab=logs{% if selected_project %}&project={{ selected_project.id }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="ml-1.5 hover:text-white"><i class="fa-solid fa-xmark"></i></a>
+        </span>
+        {% endif %}
+        {% if active_filters.severity %}
+        <span class="inline-flex items-center bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+          <i class="fa-solid fa-tag mr-1.5"></i> Severity: {{ active_filters.severity }}
+          <a href="/?tab=logs{% if selected_project %}&project={{ selected_project.id }}{% endif %}{% if selected_server %}&server={{ selected_server.id }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="ml-1.5 hover:text-white"><i class="fa-solid fa-xmark"></i></a>
+        </span>
+        {% endif %}
+        {% if active_filters.q %}
+        <span class="inline-flex items-center bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-lg">
+          <i class="fa-solid fa-magnifying-glass mr-1.5"></i> Search: "{{ active_filters.q }}"
+          <a href="/?tab=logs{% if selected_project %}&project={{ selected_project.id }}{% endif %}{% if selected_server %}&server={{ selected_server.id }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}" class="ml-1.5 hover:text-white"><i class="fa-solid fa-xmark"></i></a>
+        </span>
+        {% endif %}
+        <span class="text-slate-500 ml-auto font-mono">Showing {{ filtered_logs_count }} matching records</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Middle Grid: Errors by Project & Server Quick Summary -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Errors by Project -->
       <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
-        <h2 class="text-base font-semibold text-white mb-4 flex items-center">
-          <i class="fa-solid fa-diagram-project text-indigo-400 mr-2"></i> Errors by Project
-        </h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-white flex items-center">
+            <i class="fa-solid fa-diagram-project text-indigo-400 mr-2"></i> Top Projects by Error Volume
+          </h2>
+          <a href="/?tab=projects" class="text-xs text-indigo-400 hover:text-indigo-300">View all projects &rarr;</a>
+        </div>
         {% if errors_by_project %}
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
@@ -131,9 +381,11 @@
             </thead>
             <tbody class="divide-y divide-slate-800">
               {% for p in errors_by_project %}
-              <tr>
+              <tr class="hover:bg-slate-800/40 transition">
                 <td class="py-3 font-medium text-slate-200">
-                  <a href="/settings/?project={{ p.project__id }}" class="hover:text-indigo-400 transition">{{ p.project__name }}</a>
+                  <a href="/?tab=logs&project={{ p.project__id }}" class="hover:text-indigo-400 transition" title="Filter logs for this project">
+                    {{ p.project__name }}
+                  </a>
                 </td>
                 <td class="py-3">
                   <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">{{ p.project__environment }}</span>
@@ -154,9 +406,12 @@
 
       <!-- Errors by Server -->
       <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
-        <h2 class="text-base font-semibold text-white mb-4 flex items-center">
-          <i class="fa-solid fa-network-wired text-sky-400 mr-2"></i> Errors by Server
-        </h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-white flex items-center">
+            <i class="fa-solid fa-network-wired text-sky-400 mr-2"></i> Top Servers by Error Volume
+          </h2>
+          <a href="/?tab=servers" class="text-xs text-sky-400 hover:text-sky-300">View all servers &rarr;</a>
+        </div>
         {% if errors_by_server %}
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
@@ -169,8 +424,12 @@
             </thead>
             <tbody class="divide-y divide-slate-800">
               {% for s in errors_by_server %}
-              <tr>
-                <td class="py-3 font-medium text-slate-200">{{ s.server__name }}</td>
+              <tr class="hover:bg-slate-800/40 transition">
+                <td class="py-3 font-medium text-slate-200">
+                  <a href="/?tab=logs&server={{ s.server__id }}" class="hover:text-sky-400 transition" title="Filter logs for this server">
+                    {{ s.server__name }}
+                  </a>
+                </td>
                 <td class="py-3 text-slate-400 font-mono text-xs">{{ s.server__hostname }}</td>
                 <td class="py-3 text-right text-rose-400 font-bold">{{ s.error_count }}</td>
               </tr>
@@ -184,14 +443,17 @@
       </div>
     </div>
 
-    <!-- Recent Activity -->
+    <!-- Recent Activity Log Table -->
     <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-base font-semibold text-white flex items-center">
-          <i class="fa-solid fa-clock-rotate-left text-amber-400 mr-2"></i> Recent Activity Feed
+          <i class="fa-solid fa-clock-rotate-left text-amber-400 mr-2"></i>
+          Activity Log Stream
+          {% if selected_project %}<span class="text-xs ml-2 text-indigo-400 font-normal">({{ selected_project.name }})</span>{% endif %}
+          {% if selected_server %}<span class="text-xs ml-1 text-sky-400 font-normal">[{{ selected_server.hostname }}]</span>{% endif %}
         </h2>
-        <a href="/api/v1/notifications/history/?format=csv" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
-          <i class="fa-solid fa-download mr-1"></i> Export CSV
+        <a href="/api/v1/notifications/history/export/?format=csv{% if selected_project %}&project={{ selected_project.id }}{% endif %}{% if selected_server %}&server={{ selected_server.id }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+          <i class="fa-solid fa-download mr-1"></i> Export Filtered CSV
         </a>
       </div>
 
@@ -201,8 +463,10 @@
           <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
             <tr>
               <th class="py-2.5">Severity</th>
-              <th class="py-2.5">Title</th>
-              <th class="py-2.5">Project / Service</th>
+              <th class="py-2.5">Title & Message</th>
+              <th class="py-2.5">Project</th>
+              <th class="py-2.5">Server</th>
+              <th class="py-2.5">Service</th>
               <th class="py-2.5">Status</th>
               <th class="py-2.5 text-right">Time</th>
             </tr>
@@ -226,16 +490,32 @@
                 {% endif %}
               </td>
               <td class="py-3 font-medium text-slate-200">
-                <div>{{ n.title }}</div>
+                <div class="flex items-center space-x-2">
+                  <span>{{ n.title }}</span>
+                  {% if n.error_type %}
+                    <span class="text-[10px] bg-slate-800 text-rose-300 px-1.5 py-0.5 rounded border border-rose-900/50 font-mono">{{ n.error_type }}</span>
+                  {% endif %}
+                </div>
                 {% if n.occurrence_count > 1 %}
                   <span class="text-[10px] text-amber-400"><i class="fa-solid fa-clone mr-1"></i>Grouped ({{ n.occurrence_count }} occurrences)</span>
                 {% endif %}
               </td>
-              <td class="py-3 text-slate-400">
-                <span class="text-slate-300">{{ n.project.name }}</span>
-                {% if n.service_name %}
-                  <span class="text-xs text-slate-500 font-mono">({{ n.service_name }})</span>
+              <td class="py-3">
+                <a href="/?tab=logs&project={{ n.project.id }}" class="text-indigo-400 hover:text-indigo-300 transition hover:underline" title="Filter by this project">
+                  {{ n.project.name }}
+                </a>
+              </td>
+              <td class="py-3">
+                {% if n.server %}
+                  <a href="/?tab=logs&server={{ n.server.id }}" class="text-xs bg-slate-800 hover:bg-slate-700 text-sky-300 px-2 py-0.5 rounded font-mono border border-slate-700 transition" title="Filter by this server">
+                    <i class="fa-solid fa-server text-[10px] mr-1 text-sky-400"></i>{{ n.server.hostname }}
+                  </a>
+                {% else %}
+                  <span class="text-xs text-slate-600 font-mono">N/A</span>
                 {% endif %}
+              </td>
+              <td class="py-3 text-slate-400 text-xs font-mono">
+                {{ n.service_name|default:"—" }}
               </td>
               <td class="py-3">
                 <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-700/60 text-slate-300">{{ n.status }}</span>
@@ -251,10 +531,17 @@
       {% else %}
       <div class="text-center py-12 text-slate-500">
         <i class="fa-regular fa-bell-slash text-3xl mb-3"></i>
-        <p>No notifications ingested yet. Start sending notifications to see them live here!</p>
+        <p>No notifications match the selected filters.</p>
+        {% if active_filters %}
+        <div class="mt-3">
+          <a href="/?tab=logs" class="text-xs text-indigo-400 hover:underline">Clear all filters</a>
+        </div>
+        {% endif %}
       </div>
       {% endif %}
     </div>
+
+    {% endif %}
   </main>
 </body>
 </html>

@@ -11,10 +11,16 @@ from projects.models import Project, Server
 
 
 def dashboard_home_view(request):
-    """Render the main dashboard overview page."""
+    """Render the main dashboard overview page with project, server, and severity filters."""
     user = request.user
     now = timezone.now()
-    day_ago = now - timedelta(days=1)
+
+    # Query parameters for filtering
+    project_filter = request.GET.get('project', '').strip()
+    server_filter = request.GET.get('server', '').strip()
+    severity_filter = request.GET.get('severity', '').strip().upper()
+    search_query = request.GET.get('q', '').strip()
+    view_tab = request.GET.get('tab', 'logs').strip()  # 'logs', 'projects', 'servers'
 
     notif_qs = Notification.objects.all()
     delivery_qs = DeliveryAttempt.objects.all()
@@ -27,6 +33,7 @@ def dashboard_home_view(request):
         proj_qs = proj_qs.filter(owner=user)
         server_qs = server_qs.filter(project__owner=user)
 
+    # Global counts before table filters
     total_notifications = notif_qs.count()
     critical_errors_total = notif_qs.filter(severity=Severity.CRITICAL.value).count()
     critical_errors_unresolved = notif_qs.filter(
@@ -40,23 +47,87 @@ def dashboard_home_view(request):
     delivery_failed = delivery_qs.filter(status__in=[DeliveryStatus.FAILED.value, DeliveryStatus.DEAD_LETTER.value]).count()
     success_rate = round((delivery_success / delivery_total) * 100, 1) if delivery_total > 0 else 100.0
 
-    # Errors by project
-    errors_by_project = list(
-        notif_qs.filter(severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])
-        .values('project__id', 'project__name', 'project__environment', 'project__log_retention_days')
-        .annotate(error_count=Count('id'))
-        .order_by('-error_count')[:5]
+    # Display logs as per project (aggregations)
+    logs_by_project = list(
+        notif_qs.values('project__id', 'project__name', 'project__slug', 'project__environment', 'project__log_retention_days')
+        .annotate(
+            total_count=Count('id'),
+            error_count=Count('id', filter=Q(severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])),
+            critical_count=Count('id', filter=Q(severity=Severity.CRITICAL.value)),
+            unresolved_count=Count('id', filter=Q(is_resolved=False, severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])),
+        )
+        .order_by('-total_count')
     )
 
-    # Errors by server
-    errors_by_server = list(
-        notif_qs.filter(server__isnull=False, severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])
-        .values('server__name', 'server__hostname')
-        .annotate(error_count=Count('id'))
-        .order_by('-error_count')[:5]
+    # Display logs as per server (aggregations)
+    logs_by_server = list(
+        notif_qs.filter(server__isnull=False)
+        .values('server__id', 'server__name', 'server__hostname', 'server__environment', 'server__project__name', 'server__project__id')
+        .annotate(
+            total_count=Count('id'),
+            error_count=Count('id', filter=Q(severity__in=[Severity.ERROR.value, Severity.CRITICAL.value])),
+            critical_count=Count('id', filter=Q(severity=Severity.CRITICAL.value)),
+        )
+        .order_by('-total_count')
     )
 
-    recent_activity = notif_qs.select_related('project', 'server').order_by('-created_at')[:20]
+    # Top 5 errors for widgets
+    errors_by_project = logs_by_project[:5]
+    errors_by_server = logs_by_server[:5]
+
+    # Apply filters to the recent activity logs feed
+    active_filters = {}
+    selected_project = None
+    selected_server = None
+
+    if project_filter:
+        p_obj = None
+        try:
+            import uuid as _uuid
+            _uuid.UUID(project_filter)
+            p_obj = proj_qs.filter(id=project_filter).first()
+        except (ValueError, AttributeError):
+            pass
+        if not p_obj:
+            p_obj = proj_qs.filter(slug=project_filter).first() or proj_qs.filter(name__iexact=project_filter).first()
+
+        if p_obj:
+            notif_qs = notif_qs.filter(project=p_obj)
+            server_qs = server_qs.filter(project=p_obj)
+            selected_project = p_obj
+            active_filters['project'] = p_obj.name
+
+    if server_filter:
+        s_obj = None
+        try:
+            import uuid as _uuid
+            _uuid.UUID(server_filter)
+            s_obj = Server.objects.filter(id=server_filter).first()
+        except (ValueError, AttributeError):
+            pass
+        if not s_obj:
+            s_obj = Server.objects.filter(hostname=server_filter).first() or Server.objects.filter(name__iexact=server_filter).first()
+
+        if s_obj:
+            notif_qs = notif_qs.filter(server=s_obj)
+            selected_server = s_obj
+            active_filters['server'] = s_obj.hostname or s_obj.name
+
+    if severity_filter and severity_filter in [s.value for s in Severity]:
+        notif_qs = notif_qs.filter(severity=severity_filter)
+        active_filters['severity'] = severity_filter
+
+    if search_query:
+        notif_qs = notif_qs.filter(
+            Q(title__icontains=search_query) |
+            Q(message__icontains=search_query) |
+            Q(service_name__icontains=search_query) |
+            Q(error_type__icontains=search_query)
+        )
+        active_filters['q'] = search_query
+
+    filtered_logs_count = notif_qs.count()
+    recent_activity = notif_qs.select_related('project', 'server').order_by('-created_at')[:50]
 
     context = {
         'total_notifications': total_notifications,
@@ -68,8 +139,19 @@ def dashboard_home_view(request):
         'success_rate': success_rate,
         'errors_by_project': errors_by_project,
         'errors_by_server': errors_by_server,
+        'logs_by_project': logs_by_project,
+        'logs_by_server': logs_by_server,
         'recent_activity': recent_activity,
+        'filtered_logs_count': filtered_logs_count,
         'projects': proj_qs,
+        'servers': server_qs,
+        'severities': [s.value for s in Severity],
+        'selected_project': selected_project,
+        'selected_server': selected_server,
+        'selected_severity': severity_filter,
+        'search_query': search_query,
+        'active_filters': active_filters,
+        'view_tab': view_tab,
     }
     return render(request, 'dashboard/index.html', context)
 

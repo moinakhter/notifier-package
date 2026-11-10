@@ -489,6 +489,54 @@ class NotifierServiceFeatureTests(TestCase):
         self.assertIn('recent_activity', data)
         self.assertGreaterEqual(len(data['recent_activity']), 1)
 
+    def test_dashboard_project_and_server_log_filters(self):
+        """Test filtering logs on the dashboard by project, server, and tabs."""
+        # Create a second project and server
+        project_b = Project.objects.create(name='Billing Microservice', owner=self.user)
+        server_b = Server.objects.create(project=project_b, name='Billing Worker 01', hostname='billing-worker.prod')
+
+        # Log for project A & server A
+        notif_a = Notification.objects.create(
+            project=self.project,
+            server=self.server,
+            title='Project A Specific Alert',
+            severity=Severity.ERROR,
+        )
+
+        # Log for project B & server B
+        notif_b = Notification.objects.create(
+            project=project_b,
+            server=server_b,
+            title='Project B Specific Alert',
+            severity=Severity.CRITICAL,
+        )
+
+        # 1. Test filtering by project A
+        res = self.client.get(f'/?project={self.project.id}')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'Project A Specific Alert')
+        self.assertNotContains(res, 'Project B Specific Alert')
+
+        # 2. Test filtering by server B
+        res = self.client.get(f'/?server={server_b.id}')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'Project B Specific Alert')
+        self.assertNotContains(res, 'Project A Specific Alert')
+
+        # 3. Test logs as per project view tab
+        res = self.client.get('/?tab=projects')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'Logs Breakdown by Project')
+        self.assertContains(res, 'Ecommerce Platform')
+        self.assertContains(res, 'Billing Microservice')
+
+        # 4. Test logs as per server view tab
+        res = self.client.get('/?tab=servers')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'Logs Breakdown by Server')
+        self.assertContains(res, 'gw01.prod.internal')
+        self.assertContains(res, 'billing-worker.prod')
+
     # =========================================================================
     # FEATURE 7: SEVERITY FILTERING & EXCEPTION-ONLY SELECTION TESTS
     # =========================================================================

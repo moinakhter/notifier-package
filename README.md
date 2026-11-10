@@ -28,6 +28,11 @@ Designed to absorb **hundreds of thousands of logs per second** across distribut
 - **Multi-Server & Multi-Project Auto-Discovery**:
   - Multiple services across different servers can connect to the **same central database** at the same time.
   - Projects and servers are automatically registered upon receiving their first alert.
+- **Interactive Multi-Criteria Log Filtering & Explorer**:
+  - Filter logs live on the dashboard by **Project**, **Server**, **Severity** (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, `SUCCESS`), and **Keyword Search**.
+  - **Logs as per Project** tab: Aggregated metrics per project (total logs, error count, criticals, unresolved alerts) with 1-click filter links.
+  - **Logs as per Server** tab: Aggregated metrics per remote server (hostname, project association, errors, total volume).
+  - One-click filter links directly on project and server badges in the log stream.
 - **Multi-Channel Delivery**: Built-in dispatchers for **Email (SMTP)**, **Telegram Bot API**, **WhatsApp Cloud API**, and **Instagram Graph API**.
 - **Triage & History**: Web Dashboard, full traceback viewer, event grouping, duplicate detection, acknowledging, resolving, and CSV/JSON export.
 
